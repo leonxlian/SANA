@@ -1,0 +1,4 @@
+#!/bin/sh
+cat "$@" |
+    awk 'BEGIN{OFS="\t"}
+	!used[$2]&&!used[$3]{print $2,$3;++used[$2];++used[$3]}'
