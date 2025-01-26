@@ -16,7 +16,7 @@ double EdgeRatio::eval(const Alignment& A) {
 
 
 double EdgeRatio::getRatio(double w1, double w2) {
-    if (w1 == 0 and w2 == 0) return 1;
+    if (w1 == 0 and w2 == 0) return 0;
     double r = (abs(w1) < abs(w2) ? w1/w2 : w2/w1);
     // At this point, r is in [-1,1], but we want it in [0,1], so add 1 and divide by 2
     r = (r+1)/2;
@@ -36,12 +36,14 @@ double EdgeRatio::getEdgeRatioSum(const Graph *G1, const Graph *G2, const Alignm
     double edgeRatioSum = 0;
     double c = 0;
     for (const auto& edge : *(G1->getEdgeList())) {
-      uint node1 = edge[0], node2 = edge[1];
-      double r = getAligEdgeScore(G1,node1,node2, G2,A[node1],A[node2]);
-      double y = r - c; // the following few lines implement a high-precision sum that avoids most roundoff problems
-      double t = edgeRatioSum + y;
-      c = (t - edgeRatioSum) - y;
-      edgeRatioSum = t;
+	uint node1 = edge[0], node2 = edge[1];
+	double r = getAligEdgeScore(G1,node1,node2, G2,A[node1],A[node2]);
+	double y = r - c; // the following few lines implement a high-precision sum that avoids most roundoff problems
+	double t = edgeRatioSum + y;
+	c = (t - edgeRatioSum) - y;
+	edgeRatioSum = t;
+	// We don't need to include the reverse edge here in the directed graph case, because *if* a reverse edge of
+	// (u,v) exists, it's actually *in* this edgeList.
     }
     return edgeRatioSum;
 #endif
@@ -49,6 +51,6 @@ double EdgeRatio::getEdgeRatioSum(const Graph *G1, const Graph *G2, const Alignm
 
 double EdgeRatio::adjustSumToTargetScore(const Graph *G1, const Graph *G2, double edgeRatioSum) {
     // The maximum possible score is attained during a correct self-alignment, in which case every edge has a ratio of 1.
-    return edgeRatioSum / min(G1->getNumEdges(), G2->getNumEdges());
+    return edgeRatioSum / G1->getNumEdges();
 }
 

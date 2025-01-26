@@ -191,6 +191,14 @@ Alignment &Alignment::operator=(Alignment other) {
 
 uint Alignment::computeNumAlignedEdges(const Graph& G1, const Graph& G2) const {
     uint res = 0;
+    // Note this NEEDS TO STAY THE WAY IT IS for MULTI to work correctly, even though it's badly named for other cases.
+    // This is because in MULTI, G2 is the shadow network, and G2.getEdgeWeight tells us how many edges from the other
+    // networks are "above" the shadow network. For almost any other case, this function is really mis-named and should,
+    // in principle, use "hasEdge" if we wanted to actually return the *number* of aligned edges. But who cares, because....
+    // NOTE2: this really shouldn't be used in objective functions, because different objective functions can make
+    // arbitrary specifications on what an aligned edge costs. For example if the edges are weighted, then EdgeRatio
+    // says the aligned edges is min(e1,e2)/max(e1,e2), whereas EdgeMin is just min(e1,e2). In such cases "counting"
+    // aligned edges is irrelevant.
     for (const auto& edge: *(G1.getEdgeList()))
         res += G2.getEdgeWeight(A[edge[0]], A[edge[1]]);
     return res;
