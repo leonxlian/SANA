@@ -24,15 +24,18 @@ which(){ echo "$PATH" | tr : "$NL" | awk '!seen[$0]{print}{++seen[$0]}' | while 
 
 [ $# -le 1 ] || die "expecting at most one filename [otherwise use stdin]"
 
-sed 's///' "$@" | tr , "$TAB" |
-    hawk '{ASSERT(NF==2||NF==3,"must have 2 or 3 columns");if(NF==3)ASSERT(1*$3,"third column is not a number");}
-	($2 in edge) && ($1 in edge[$2]){
-	    if(ABS($3)>ABS(edge[$2][$1]))
-		delete edge[$2][$1]; #delete the other one and continue to the next block to assign THIS one
-	    else
-		next; # otherwise keep the other one and skip the assignment in the next block
-	}
-	{edge[$1][$2]=$3}
-	END{
-	    for(u in edge)for(v in edge[u]) printf "%s\t%s\t%s\n",u,v,edge[u][v]
+MAX_WEIGHT=255 # max weight -- SPECIFIC TO FlyWire, to allow 8-bit weights!
+sed 's///' "$@" | fgrep -v ' ' | # get rid of the space-riddled line 1 in FlyWire
+    tr , "$TAB" | # the tr is to allow CSV files as input
+    sort -k 3gr | # sort heaviest weights first
+    hawk '{ASSERT(NF==2 || NF==3,"network must be weighted with 3 columns or unweighted with 2")}
+	NF==3{ASSERT(1*$3,"third column is not a number")}
+	$1!=$2{ # skip self-edges at least for FlyWire because male has only 1 to 12,000 in female
+	    u=MIN($1,$2); v=MAX($1,$2);
+	    if(!edge[u][v]) {
+		++edge[u][v];
+		printf "%s\t%s",u,v
+		if(NF==3) printf "\t%d",MIN($3,'$MAX_WEIGHT')
+		print ""
+	    }
 	}'
