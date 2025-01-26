@@ -5,6 +5,7 @@
 #include <map>
 #include <unordered_set>
 #include <cstdlib>
+#include <cassert>
 #include <iostream>
 #include <sstream>
 #include <cstdio>
@@ -86,6 +87,19 @@ void normalizeWeights(vector<double>& weights) {
     if (sum > 0) {
         for (uint i = 0; i < n; i++) weights[i] = weights[i]/sum;
     }
+}
+
+// magic numerical analysis that gets an accurate sum by accounting for roundoff
+double AccurateSum(const vector<double>& weights) {
+    uint n = weights.size();
+    assert(n>0);
+    double sum=0, c = 0;
+    for (uint i=0; i<n; i++) {
+        double r = weights[i], y = r - c, t = sum + y;
+        c = (t - sum) - y; sum = t;
+    }
+    assert(sum>0);
+    return sum;
 }
 
 string extractDecimals(double value, int count) {

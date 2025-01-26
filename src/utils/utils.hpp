@@ -30,6 +30,7 @@ vector<string> nonEmptySplit(const string& s, char c); //keeps only non-empty st
 
 double vectorMean(const vector<double>& v);
 void normalizeWeights(vector<double>& weights);
+double AccurateSum(const vector<double>& weights);
 
 void printTable(const vector<vector<string>>& table, int colSeparation, ostream& stream);
 
