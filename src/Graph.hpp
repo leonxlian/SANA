@@ -25,14 +25,13 @@ using namespace std;
 //EDGE_T: macro specifying the type of the edge weights
 #if defined(MULTI_PAIRWISE) || defined(MULTI_MPI)
   #ifdef WEIGHT
-    #define EDGE_T float
     #error currently, MULTI_* is not designed for float edges
   #else
     #define EDGE_T unsigned char //change to unsigned short for >256 networks
   #endif
 #else
   #ifdef WEIGHT
-    #define EDGE_T short
+    #define EDGE_T unsigned char // I've clipped FlyWire edge weights at 255
   #else
     #define EDGE_T bool //unweighted graphs -- the normal/traditional setting
   #endif
