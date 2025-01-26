@@ -25,14 +25,13 @@ using namespace std;
 //EDGE_T: macro specifying the type of the edge weights
 #if defined(MULTI_PAIRWISE) || defined(MULTI_MPI)
   #ifdef WEIGHT
-    #define EDGE_T float
     #error currently, MULTI_* is not designed for float edges
   #else
     #define EDGE_T unsigned char //change to unsigned short for >256 networks
   #endif
 #else
   #ifdef WEIGHT
-    #define EDGE_T short
+    #define EDGE_T unsigned char // I've clipped FlyWire edge weights at 255
   #else
     #define EDGE_T bool //unweighted graphs -- the normal/traditional setting
   #endif
@@ -107,7 +106,9 @@ public:
     //large data structures are returned as const pointers
     //recommendation: use the getters above instead, when possible
     const vector<uint>* getAdjList(uint node) const { return &adjLists.at(node); }
+    const vector<uint>* getInjList(uint node) const { return &injLists.at(node); }
     const vector<vector<uint>>* getAdjLists() const { return &adjLists; }
+    const vector<vector<uint>>* getInjLists() const { return &injLists; }
     const vector<array<uint, 2>>* getEdgeList() const { return &edgeList; }
     const Matrix<EDGE_T>* getAdjMatrix() const { return &adjMatrix; }
     const vector<string>* getNodeNames() const { return &nodeNames; }
@@ -173,7 +174,8 @@ private:
     //main data structures
     vector<array<uint, 2>> edgeList; //edges in no particular order, no repetitions
     vector<string> nodeNames;
-    vector<vector<uint>> adjLists; //neighbors in no particular order, no repetitions
+    vector<vector<uint>> adjLists; //neighbors (outgoing in directed case) in no particular order, no repetitions
+    vector<vector<uint>> injLists; // incoming edges, used only if the graph is directed.
     Matrix<EDGE_T> adjMatrix;
     unordered_map<string, uint> nodeNameToIndexMap; //reverse of nodeNames
 

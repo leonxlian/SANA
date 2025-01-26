@@ -63,6 +63,7 @@ Graph::Graph(const bool directed, const string& graphName, const string& optiona
     assert(uniformWeights or optionalEdgeWeights.size() == edgeList.size());
 
     adjLists.resize(numNodes);
+    injLists.resize(numNodes);
     adjMatrix = Matrix<EDGE_T>(numNodes);
     totalWeight = vector<double>(numNodes, 0.0);
     totalEdgeWeight = 0;
@@ -72,6 +73,7 @@ Graph::Graph(const bool directed, const string& graphName, const string& optiona
         adjLists[node1].push_back(node2);
         if (node1 == node2) ; // do nothing... don't duplicate self-loop whether it's directed on undirected
         else if(!directed) adjLists[node2].push_back(node1);
+        else injLists[node2].push_back(node1);
         EDGE_T weight;
         if (uniformWeights) weight = 1;
         else weight = optionalEdgeWeights[i];
@@ -85,6 +87,8 @@ Graph::Graph(const bool directed, const string& graphName, const string& optiona
 	}
         totalEdgeWeight += weight;
     }
+    adjLists.shrink_to_fit();
+    injLists.shrink_to_fit();
     initColorDataStructs(partialNodeColorPairs);
 }
 
@@ -307,7 +311,7 @@ vector<uint> Graph::degreeDistribution() const {
     return res;
 }
 
-//predicate for sorting CCs
+// predicate for sorting CCs, but it doesn't measure strongly connected components (and I don't care right now)
 bool _isBiggerCC(const vector<uint>& a, const vector<uint>& b) { return a.size()>b.size(); }
 vector<vector<uint>> Graph::connectedComponents() const {
     uint n = getNumNodes();
@@ -492,14 +496,22 @@ void Graph::debugPrint() const {
     cerr<<"filePath: "<<filePath<<endl;
     cerr<<"directed: "<<directed<<endl;
     cerr<<"adjLists size: "<<adjLists.size()<<endl;
+    cerr<<"injLists size: "<<injLists.size()<<endl;
     cerr<<"neighbor lists sizes: ";
     for(uint i = 0; i < min(adjLists.size(), MAX_LEN); i++) cerr<<adjLists[i].size()<<' ';
     if (MAX_LEN < adjLists.size()) cerr<<"...";
     cerr<<endl;
-
     cerr<<"adjLists[0]: ";
     for (uint i = 0; i < min(adjLists[0].size(), MAX_LEN); i++) cerr<<adjLists[0][i]<<' ';
     if (MAX_LEN < adjLists[0].size()) cerr<<"...";
+    cerr<<endl;
+
+    for(uint i = 0; i < min(injLists.size(), MAX_LEN); i++) cerr<<injLists[i].size()<<' ';
+    if (MAX_LEN < injLists.size()) cerr<<"...";
+    cerr<<endl;
+    cerr<<"injLists[0]: ";
+    for (uint i = 0; i < min(injLists[0].size(), MAX_LEN); i++) cerr<<injLists[0][i]<<' ';
+    if (MAX_LEN < injLists[0].size()) cerr<<"...";
     cerr<<endl;
 
     cerr<<"adjMatrix size: "<<adjMatrix.size()<<endl;
@@ -568,15 +580,17 @@ void Graph::debugPrint() const {
 bool Graph::isWellDefined() const {
     ostringstream ss;
     //data structures have the right size
-    uint n = adjLists.size();
-    if (adjMatrix.size() != n)
-        ss<<"adjLists has size "<<n<<" but adjMatrix has size "<<adjMatrix.size()<<endl;
+    uint n = adjMatrix.size();
+    if (adjLists.size() != n)
+        ss<<"adjMatrix has size "<<n<<" but adjLists has size "<<adjLists.size()<<endl;
+    if (injLists.size() != n)
+        ss<<"adjMatrix has size "<<n<<" but injLists has size "<<injLists.size()<<endl;
     if (nodeNames.size() != n)
-        ss<<"adjLists has size "<<n<<" but nodeNames has size "<<nodeNames.size()<<endl;
+        ss<<"adjMatrix has size "<<n<<" but nodeNames has size "<<nodeNames.size()<<endl;
     if (nodeNameToIndexMap.size() != n)
-        ss<<"adjLists has size "<<n<<" but nodeNameToIndexMap has size "<<nodeNameToIndexMap.size()<<endl;
+        ss<<"adjMatrix has size "<<n<<" but nodeNameToIndexMap has size "<<nodeNameToIndexMap.size()<<endl;
     if (nodeColors.size() != n)
-        ss<<"adjLists has size "<<n<<" but nodeColors has size "<<nodeNameToIndexMap.size()<<endl;
+        ss<<"adjMatrix has size "<<n<<" but nodeColors has size "<<nodeNameToIndexMap.size()<<endl;
     uint k = colorNames.size();
     if (colorNameToId.size() != k)
         ss<<"colorNames has size "<<k<<" but colorNameToId has size "<<colorNameToId.size()<<endl;
@@ -632,6 +646,7 @@ bool Graph::isWellDefined() const {
     uint singleCountedNumEdges = 0, doubleCountedNumEdges = 0; //once from each endpoint
     for (uint i = 0; i < n; i++) {
         uint numNbrs = adjLists[i].size();
+//<<<<<< STOPPED HERE >>>>>>>>>>>>
         if (numNbrs > n)
             ss<<"adjLists["<<i<<"] has size "<<numNbrs<<" but adjLists has size "<<n<<endl;
         if(directed) singleCountedNumEdges += adjLists[i].size();
