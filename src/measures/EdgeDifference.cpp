@@ -8,7 +8,6 @@ EdgeDifference::~EdgeDifference() {
 }
 
 double EdgeDifference::eval(const Alignment& A) {
-    uint n1 = G1->getNumNodes();
     double edgeDifferenceSum = EdgeDifference::getEdgeDifferenceSum(G1, G2, A);
     return EdgeDifference::adjustSumToTargetScore(G1, G2, edgeDifferenceSum);
 }
@@ -27,7 +26,6 @@ double EdgeDifference::getEdgeDifferenceSum(const Graph* G1, const Graph* G2, co
 }
 
 double EdgeDifference::adjustSumToTargetScore(const Graph *G1, const Graph *G2, const double edgeDifferenceSum) {
-    uint n1 = G1->getNumNodes();
     uint m1=  G1->getNumEdges(), m2=G2->getNumEdges();
     double mean = edgeDifferenceSum / min(m1,m2);
     return 1 - mean / 2;

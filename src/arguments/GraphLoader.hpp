@@ -45,7 +45,7 @@ public:
     //loads graph from filePath according to the file extension
     //the graph is loaded as monochromatic
     static Graph loadGraphFromFile(
-      const string& graphName, const string& filePath, bool loadWeights);
+      const string& graphName, const string& filePath, bool loadWeights, bool directed);
 
     //utility (todo: consider moving them to utils)
     static vector<array<string, 2>> rawTwoColumnFileData(const string& outFile);
@@ -55,8 +55,8 @@ public:
 private:
     //functions to extract raw data from the file and process it as necessary
     //to call the graph constructor (without colors)
-    static Graph loadGraphFromGWFile(const string& graphName, const string& filePath, bool loadWeights);
-    static Graph loadGraphFromEdgeListFile(const string& graphName, const string& filePath, bool loadWeights);
+    static Graph loadGraphFromGWFile(const string& graphName, const string& filePath, bool loadWeights, bool directed);
+    static Graph loadGraphFromEdgeListFile(const string& graphName, const string& filePath, bool loadWeights, bool directed);
     static Graph loadGraphFromGmlFile(const string& graphName, const string& filePath);
     static Graph loadGraphFromLgfFile(const string& graphName, const string& filePath);
     static Graph loadGraphFromXmlFile(const string& graphName, const string& filePath);

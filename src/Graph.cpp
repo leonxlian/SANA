@@ -26,12 +26,12 @@ using namespace std;
 const string Graph::DEFAULT_COLOR_NAME = "__default"; 
 const uint Graph::INVALID_COLOR_ID = 9999999;
 
-Graph::Graph(const string& graphName, const string& optionalFilePath,
+Graph::Graph(const bool directed, const string& graphName, const string& optionalFilePath,
              const vector<array<uint, 2>>& edgeList,
              const vector<string>& optionalNodeNames,
              const vector<EDGE_T>& optionalEdgeWeights,
              const vector<array<string, 2>>& partialNodeColorPairs):
-        name(graphName), filePath(optionalFilePath),
+        directed(directed), name(graphName), filePath(optionalFilePath),
         edgeList(edgeList), nodeNames(optionalNodeNames) {
 
     uint numNodes;
@@ -70,22 +70,25 @@ Graph::Graph(const string& graphName, const string& optionalFilePath,
         uint node1 = edgeList[i][0], node2 = edgeList[i][1];
         assert(node1 < numNodes and node2 < numNodes);
         adjLists[node1].push_back(node2);
-        if (node1 != node2) { //don't duplicate self-loop
+        if (!directed && node1 != node2) { //don't duplicate self-loop
             adjLists[node2].push_back(node1); 
         }
         EDGE_T weight;
         if (uniformWeights) weight = 1;
         else weight = optionalEdgeWeights[i];
         if (weight == 0) throw runtime_error("edges with weight 0 are not supported");
-        if (adjMatrix[node1][node2] != 0 or adjMatrix[node2][node1] != 0)
-            throw runtime_error("repeated edge in edge list passed to graph constructor");
-        adjMatrix[node1][node2] = adjMatrix[node2][node1] = weight;
-	totalWeight[node1] += weight;
-	totalWeight[node2] += weight;
-        totalEdgeWeight += weight;
+	if((directed && adjMatrix[node1][node2] != 0) ||
+	    (!directed && (adjMatrix[node1][node2] != 0 or adjMatrix[node2][node1] != 0)))
+            throw runtime_error("repeated edge ("+nodeNames[node1]+","+nodeNames[node2]+") in edge list passed to graph constructor");
+        adjMatrix[node1][node2] = weight; totalWeight[node1] += weight;
+        if(!directed) {
+	    adjMatrix[node2][node1] = weight;
+	    if(node1!=node2) totalWeight[node2] += weight;
+	}
+        if(node1!=node2) totalEdgeWeight += weight;
     }
     initColorDataStructs(partialNodeColorPairs);
-}   
+}
 
 void Graph::initColorDataStructs(const vector<array<string, 2>>& partialNodeColorPairs) {
     //data structures initialized here:
@@ -193,7 +196,7 @@ Graph Graph::nodeInducedSubgraph(const vector<uint>& nodes) const {
         if (hasDefColor and nodeColors[node] == 0) continue;
         newNodeNameToColorName.push_back({nodeNames[node], colorNames[nodeColors[node]]});
     }
-    return Graph(name+"_subgraph", "", newEdgeList, newNodeNames, newEdgeWeights, newNodeNameToColorName);
+    return Graph(directed, name+"_subgraph", "", newEdgeList, newNodeNames, newEdgeWeights, newNodeNameToColorName);
 }
 
 Graph Graph::randomNodeInducedSubgraph(uint numNodes) const {
@@ -216,13 +219,14 @@ Graph Graph::shuffledGraph(vector<uint> &newToOldMap) const {
 
 //this function is not tested a lot, use with care?
 Graph Graph::graphPower(uint power) const {
-    if (power == 0) throw runtime_error("graphs don't have 0 powers");
+    if (power == 0) throw runtime_error("graphs don't have 0 powers (well, maybe the Identity but why would you want that?)");
     if (power == 1) cerr<<"Warning: first power of a graph is just the graph itself"<<endl;
     uint n = getNumNodes();
     SparseMatrix<uint> oriAdjMat(n);
     for (const auto& edge : edgeList) {
         uint node1 = edge[0], node2 = edge[1];
-        oriAdjMat[node1][node2] = oriAdjMat[node2][node1] = 1;
+        oriAdjMat[node1][node2] = 1;
+	if(!directed) oriAdjMat[node2][node1] = 1;
     }
     SparseMatrix<uint> newAdjMat = oriAdjMat;
 
@@ -241,7 +245,7 @@ Graph Graph::graphPower(uint power) const {
             }
         }
     }
-    return Graph(name+"_power_"+to_string(power), "", newEdgeList, 
+    return Graph(directed, name+"_power_"+to_string(power), "", newEdgeList, 
                  nodeNames, {}, colorsAsNodeColorNamePairs()); //unweighted result
 }
 
@@ -281,7 +285,7 @@ Graph Graph::graphIntersection(const Graph& other, const vector<uint>& thisToOth
         }
     }
 
-    return Graph(name+"_intersection_"+other.name, "", newEdgeList,
+    return Graph(directed, name+"_intersection_"+other.name, "", newEdgeList,
                  newNodeNames, {}, newNodeColorPairs); //unweighted result
 }
 
@@ -343,7 +347,11 @@ uint Graph::numEdgesInNodeInducedSubgraph(const vector<uint>& subgraphNodes) con
     for (uint node1 : subgraphNodes)
         for (uint node2 : adjLists[node1])
             count += nodeSet.count(node2);
-    return count/2;
+    if(directed) return count;
+    else {
+	assert(count%2==0);
+	return count/2;
+    }
 }
 
 vector<uint> Graph::numEdgesAroundByLayers(uint node, uint maxDist) const {
@@ -484,6 +492,7 @@ void Graph::debugPrint() const {
     size_t MAX_LEN = 10;        
     cerr<<"DEBUG PRINT "<<name<<endl;
     cerr<<"filePath: "<<filePath<<endl;
+    cerr<<"directed: "<<directed<<endl;
     cerr<<"adjLists size: "<<adjLists.size()<<endl;
     cerr<<"neighbor lists sizes: ";
     for(uint i = 0; i < min(adjLists.size(), MAX_LEN); i++) cerr<<adjLists[i].size()<<' ';
@@ -576,26 +585,26 @@ bool Graph::isWellDefined() const {
     if (nodeGroupsByColor.size() != k)
         ss<<"colorNames has size "<<k<<" but nodeGroupsByColor has size "<<nodeGroupsByColor.size()<<endl;
 
-    //adjMatrix is symmetric and the sum of edges weights equals totalEdgeWeight
+    //adjMatrix is symmetric if !directed, and the sum of edges weights equals totalEdgeWeight
     uint numEdgesInAdjMat = 0;
     double adjMatSum = 0;
     vector<double> nodeSum = vector<double>(n, 0.0);
     for (uint i = 0; i < n; i++) {
-        for (uint j = 0; j <= i; j++) {
-            if (adjMatrix.get(i, j) != adjMatrix.get(j, i))
-                ss<<"adjMatrix is not symmetric at ("<<i<<", "<<j<<")"<<endl;
+        for (uint j = 0; j < n; j++) if(j <= i || directed) {
+            if (!directed && adjMatrix.get(i, j) != adjMatrix.get(j, i))
+                ss<<"matrix is undirected but adjMatrix is not symmetric at ("<<i<<", "<<j<<")"<<endl;
             if (hasEdge(i,j)) {
-                numEdgesInAdjMat++;
-                adjMatSum += getEdgeWeight(i,j);
+		numEdgesInAdjMat++;
+		adjMatSum += getEdgeWeight(i,j);
 		nodeSum[i] += getEdgeWeight(i,j);
-		nodeSum[j] += getEdgeWeight(i,j);
+		if(!directed) nodeSum[j] += getEdgeWeight(i,j);
             }
         }
     }
     if (adjMatSum != totalEdgeWeight)
         ss<<"totalEdgeWeight attribute is "<<totalEdgeWeight<<" but the edges in adjMatrix add up to "<<adjMatSum<<endl;
     for (uint i = 0; i < n; i++) if(nodeSum[i] != totalWeight[i])
-        ss<<"totalWeight["<<i<<"] attribute is "<<totalWeight[i]<<" but the in adjMatrix add up to "<<nodeSum[i]<<endl;
+        ss<<"totalWeight["<<i<<"] attribute is "<<totalWeight[i]<<" but in the adjMatrix add up to "<<nodeSum[i]<<endl;
 
     //edgeList: all entries appear in adjMatrix, are not repeated, and every entry in adj matrix is in edge list
     if (edgeList.size() != numEdgesInAdjMat)
@@ -611,25 +620,34 @@ bool Graph::isWellDefined() const {
         else {
             if (!hasEdge(edge[0], edge[1]))
                 ss<<"edge {"<<edge[0]<<", "<<edge[1]<<"} in edgeList missing in adjMatrix"<<endl;
-            uint nodeMin = min(edge[0], edge[1]), nodeMax = max(edge[0], edge[1]);
-            //nodeMin and nodeMax to impose a canonical order on edges
-            if (nbrSetsInEdgeList[nodeMin].count(nodeMax))
-                ss<<"edge {"<<edge[0]<<", "<<edge[1]<<"} repeated in edgeList"<<endl;
-            nbrSetsInEdgeList[nodeMin].insert(nodeMax);
+	    if(!directed) {
+		uint nodeMin = min(edge[0], edge[1]), nodeMax = max(edge[0], edge[1]);
+		//nodeMin and nodeMax to impose a canonical order on edges
+		if (nbrSetsInEdgeList[nodeMin].count(nodeMax))
+		    ss<<"edge {"<<edge[0]<<", "<<edge[1]<<"} repeated in edgeList"<<endl;
+		nbrSetsInEdgeList[nodeMin].insert(nodeMax);
+	    }
         }
     }
 
     //adjLists: all entries appear in adjMatrix, are not repeated, and every entry in adj matrix is in adj lists
-    uint doubleCountedNumEdges = 0; //once from each endpoint
+    uint singleCountedNumEdges = 0, doubleCountedNumEdges = 0; //once from each endpoint
     for (uint i = 0; i < n; i++) {
         uint numNbrs = adjLists[i].size();
         if (numNbrs > n)
             ss<<"adjLists["<<i<<"] has size "<<numNbrs<<" but adjLists has size "<<n<<endl;
+        if(directed) singleCountedNumEdges += adjLists[i].size();
         doubleCountedNumEdges += adjLists[i].size();
         if (hasEdge(i,i)) doubleCountedNumEdges++;
     }
-    if (2*edgeList.size() != doubleCountedNumEdges)
-        ss<<"edgeList has "<<2*edgeList.size()<<"edge endpoints but adjLists has "<<doubleCountedNumEdges<<endl;
+    if(directed) {
+	if (edgeList.size() != singleCountedNumEdges)
+	    ss<<"edgeList has "<<edgeList.size()<<" edge endpoints but adjLists has "<<singleCountedNumEdges<<endl;
+    } else {
+	assert(singleCountedNumEdges == 0);
+	if (2*edgeList.size() != doubleCountedNumEdges)
+	    ss<<"edgeList has "<<2*edgeList.size()<<" edge endpoints but adjLists has "<<doubleCountedNumEdges<<endl;
+    }
         
     for (uint i = 0; i < n; i++) {
         unordered_set<uint> seenNbrs;
@@ -639,7 +657,7 @@ bool Graph::isWellDefined() const {
                 ss<<"adjLists["<<i<<"] contains node "<<nbr<<" out of range"<<endl;
             else {
                 if (!hasEdge(i,nbr))
-                ss<<"adjLists["<<i<<"] contains "<<nbr<<" which is missing in adjMatrix"<<endl;
+		    ss<<"adjLists["<<getNodeName(i)<<"] contains "<<getNodeName(nbr)<<" which is missing in adjMatrix"<<endl;
                 if (seenNbrs.count(nbr))
                     ss<<"adjLists["<<i<<"] contains repeated node "<<nbr<<endl;
                 seenNbrs.insert(nbr);

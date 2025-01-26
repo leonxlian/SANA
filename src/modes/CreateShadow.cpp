@@ -89,7 +89,7 @@ void CreateShadow::createShadow(const string& outFile, const vector<string>& gra
     //dummies are added at the end
     unordered_map<string, uint> colToNodeCount;
     for (uint i = 0; i < graphFiles.size(); i++) {
-        Graph G = GraphLoader::loadGraphFromFile("", graphFiles[i], false);
+        Graph G = GraphLoader::loadGraphFromFile("", graphFiles[i], false, false);
         //if hasCols is false, every node gets the default color, which is a valid color
         if (hasCols) {
             auto nodeColorPairs = GraphLoader::rawTwoColumnFileData(colFiles[i]);
@@ -143,10 +143,10 @@ void CreateShadow::createShadow(const string& outFile, const vector<string>& gra
     //add all the edges from all the graphs to shadNbrSets
 
     //we don't have the edges yet, this is just to create random alignments if needed
-    Graph emptyShadow("", "", {}, shadNodeNames, {}, nodeColorPairs);
+    Graph emptyShadow(false, "", "", {}, shadNodeNames, {}, nodeColorPairs);
 
     for (uint i = 0; i < graphFiles.size(); i++) {
-        Graph G = GraphLoader::loadGraphFromFile("", graphFiles[i], false);
+        Graph G = GraphLoader::loadGraphFromFile("", graphFiles[i], false, false);
         if (hasCols) {
             auto nodeColorPairs = GraphLoader::rawTwoColumnFileData(colFiles[i]);
             G.initColorDataStructs(nodeColorPairs);
@@ -208,7 +208,7 @@ void CreateShadow::createShadow(const string& outFile, const vector<string>& gra
     }
     // cerr<<shadEdgeList.size()<<" "<<shadEdgeWeights.size()<<" "<<shadEdgeWeights[0]<<endl;
     //finally, build and save the shadow
-    Graph shadow("shadow", "", shadEdgeList, shadNodeNames, shadEdgeWeights, nodeColorPairs);
+    Graph shadow(false, "shadow", "", shadEdgeList, shadNodeNames, shadEdgeWeights, nodeColorPairs);
     GraphLoader::saveInGWFormat(shadow, outFile, true);
     if (hasCols) {
         //the colors never change after the first iteration of multi pairwise, so we could

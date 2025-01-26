@@ -63,6 +63,7 @@ vector<array<string, 6>> supportedArguments = {
     { "Option", "Type", "Default", "Title", "Description", "ExternalAccess" },
     //-----------------------------------GENERAL-----------------------------------------
     { "", "general", "banner", "", "General Options", "0" },
+    { "-directed", "bool", "0", "Graphs are directed (default is undirected)", "For legacy compatibility, SANA assumes the input networks are undirected. Use this option to specify that they are directed. The option applies to both networks, since it doesn't make sense to align an undirected network to a directed one, or vice versa.", "1" },
     { "-g1", "string", "yeast", "Network 1", "First nerwork (smaller one). Requirement: An alignment file must exist inside the networks directory which matches the name of the specified species.", "0" },
     { "-g2", "string", "human", "Network 2", "Second (larger in number of nodes) network.  Requirement: An alignment file must exist inside the networks directory which matches the name of the specified species.", "0" },
     { "-fg1", "string", "yeast", "Network 1", "Initializes the network G1 with an external file. Make sure that the name and path of the file exists.", "1" },

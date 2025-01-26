@@ -39,7 +39,7 @@ pair<Graph,Graph> GraphLoader::initGraphs(ArgumentParser& args) {
         g2File = "networks/"+g2Name+"/"+g2Name+".gw";
     }
 
-    bool g1HasWeights, g2HasWeights;
+    bool g1HasWeights, g2HasWeights, directed = args.bools["-directed"];
 #ifdef MULTI_PAIRWISE
  #ifdef WEIGHT
   #error multipairwise currently does not support float weights
@@ -55,8 +55,8 @@ pair<Graph,Graph> GraphLoader::initGraphs(ArgumentParser& args) {
 
     Timer T;
     T.start();
-    auto futureG1 = async(&loadGraphFromFile, g1Name, g1File, g1HasWeights);
-    auto futureG2 = async(&loadGraphFromFile, g2Name, g2File, g2HasWeights);
+    auto futureG1 = async(&loadGraphFromFile, g1Name, g1File, g1HasWeights, directed);
+    auto futureG2 = async(&loadGraphFromFile, g2Name, g2File, g2HasWeights, directed);
     Graph G1 = futureG1.get();
     Graph G2 = futureG2.get();
 #ifdef MULTI_MPI
@@ -65,6 +65,8 @@ pair<Graph,Graph> GraphLoader::initGraphs(ArgumentParser& args) {
     G1.otherGraph = &G2;
     G2.otherGraph = &G1;
 #endif
+    G1.directed = G2.directed = directed;
+
     cout << "Loading graph files took " << T.elapsedString() << endl <<endl;
 
     if (G1.getNumNodes() > G2.getNumNodes())
@@ -166,7 +168,7 @@ pair<Graph,Graph> GraphLoader::initGraphs(ArgumentParser& args) {
             for (const auto& edge : *(G2.getEdgeList()))
                 g2Weights.push_back(G2.getEdgeWeight(edge[0], edge[1]));
         }
-        G2 = Graph(G2.getName(), G2.getFilePath(), *(G2.getEdgeList()), g2NodeNames, g2Weights, g2Colors);
+        G2 = Graph(G2.directed, G2.getName(), G2.getFilePath(), *(G2.getEdgeList()), g2NodeNames, g2Weights, g2Colors);
     }
 
     string path1 = args.strings["-pathmap1"], path2 = args.strings["-pathmap2"];
@@ -274,7 +276,7 @@ void GraphLoader::saveTwoColumnData(const vector<array<string, 2>>& rows, const 
 
 //dispatches to one of the format-specific functions based on the file extension
 Graph GraphLoader::loadGraphFromFile(const string& graphName, const string& fileName,
-                                     bool loadWeights) {
+                                     bool loadWeights, bool directed) {
     string format = fileName.substr(fileName.find_last_of('.')+1);
     string uncompressedFileExt = FileIO::getUncompressedFileExtension(fileName);
     if (loadWeights and (format == "gml" or format == "lgf" or format == "xml" or format == "csv" or format == "el"))
@@ -284,10 +286,10 @@ Graph GraphLoader::loadGraphFromFile(const string& graphName, const string& file
         throw runtime_error("GraphLoader does not support format '"+format+"' for unweighted graphs");
 
     if (format == "gw" || uncompressedFileExt == "gw"){
-        return loadGraphFromGWFile(graphName, fileName, loadWeights);
+        return loadGraphFromGWFile(graphName, fileName, loadWeights, directed);
     }
     if (format == "elw" || uncompressedFileExt == "elw" || format == "el" || uncompressedFileExt == "el"){
-        return loadGraphFromEdgeListFile(graphName, fileName, loadWeights);
+        return loadGraphFromEdgeListFile(graphName, fileName, loadWeights, directed);
     }
     if (format == "gml") return loadGraphFromGmlFile(graphName, fileName);
     if (format == "lgf") return loadGraphFromLgfFile(graphName, fileName);
@@ -299,7 +301,7 @@ Graph GraphLoader::loadGraphFromFile(const string& graphName, const string& file
 }
 
 Graph GraphLoader::loadGraphFromGWFile(const string& graphName, const string& fileName, 
-                                       bool loadWeights) {
+                                       bool loadWeights, bool directed) {
     RawGWFileData gwData(fileName, loadWeights);
     //reindex 1-based edges to 0-based edges
     for (uint i = 0; i < gwData.edgeList.size(); i++) {
@@ -308,7 +310,7 @@ Graph GraphLoader::loadGraphFromGWFile(const string& graphName, const string& fi
     }
 
     if (!loadWeights)
-        return Graph(graphName, fileName, gwData.edgeList, gwData.nodeNames, {}, {});
+        return Graph(directed, graphName, fileName, gwData.edgeList, gwData.nodeNames, {}, {});
 #ifdef BOOL_EDGE_T
     throw runtime_error("cannot load weights for unweighted graph");
 #elif WEIGHT
@@ -320,7 +322,7 @@ Graph GraphLoader::loadGraphFromGWFile(const string& graphName, const string& fi
         assert(w < (1L << 8*sizeof(EDGE_T)) -1 and "EDGE_T type is not wide enough for these weights");
         edgeWeights.push_back((EDGE_T) w);
     }
-    return Graph(graphName, fileName, gwData.edgeList, gwData.nodeNames, edgeWeights, {});
+    return Graph(directed, graphName, fileName, gwData.edgeList, gwData.nodeNames, edgeWeights, {});
 #else 
     if(shadowWeights){
     vector<EDGE_T> edgeWeights;
@@ -331,13 +333,13 @@ Graph GraphLoader::loadGraphFromGWFile(const string& graphName, const string& fi
         assert(w < (1L << 8*sizeof(EDGE_T)) -1 and "EDGE_T type is not wide enough for these weights");
         edgeWeights.push_back((EDGE_T) w);
     }
-    return Graph(graphName, fileName, gwData.edgeList, gwData.nodeNames, edgeWeights, {});
+    return Graph(directed, graphName, fileName, gwData.edgeList, gwData.nodeNames, edgeWeights, {});
     }
 #endif
 }
 
 Graph GraphLoader::loadGraphFromEdgeListFile(const string& graphName, const string& fileName, 
-                                             bool loadWeights) {
+                                             bool loadWeights, bool directed) {
     string weightType;
     if (!loadWeights) weightType = "";
     else {
@@ -353,35 +355,35 @@ Graph GraphLoader::loadGraphFromEdgeListFile(const string& graphName, const stri
         namedEdgeListToEdgeListAndNodeNameList(edgeListData.namedEdgeList);
 
     if (not loadWeights)
-        return Graph(graphName, fileName, edgeAndNodeNameLists.first,
+        return Graph(directed, graphName, fileName, edgeAndNodeNameLists.first,
                      edgeAndNodeNameLists.second, {}, {});
 
 #ifdef BOOL_EDGE_T
     throw runtime_error("cannot load weights for unweighted graph");
 #elif WEIGHT
-    return Graph(graphName, fileName, edgeAndNodeNameLists.first, edgeAndNodeNameLists.second, edgeListData.weights, {});
+    return Graph(directed, graphName, fileName, edgeAndNodeNameLists.first, edgeAndNodeNameLists.second, edgeListData.weights, {});
 #endif
 }
 
 Graph GraphLoader::loadGraphFromGmlFile(const string& gName, const string& file) {
     RawGmlFileData gmlData(file);
     auto edgesAndNames = namedEdgeListToEdgeListAndNodeNameList(gmlData.namedEdgeList);
-    return Graph(gName, file, edgesAndNames.first, edgesAndNames.second, {}, {});
+    return Graph(false, gName, file, edgesAndNames.first, edgesAndNames.second, {}, {});
 }
 Graph GraphLoader::loadGraphFromLgfFile(const string& gName, const string& file) {
     RawLgfFileData lgfData(file);
     auto edgesAndNames = namedEdgeListToEdgeListAndNodeNameList(lgfData.namedEdgeList);
-    return Graph(gName, file, edgesAndNames.first, edgesAndNames.second, {}, {});
+    return Graph(false, gName, file, edgesAndNames.first, edgesAndNames.second, {}, {});
 }
 Graph GraphLoader::loadGraphFromXmlFile(const string& gName, const string& file) {
     RawXmlFileData xmlData(file);
     auto edgesAndNames = namedEdgeListToEdgeListAndNodeNameList(xmlData.namedEdgeList);
-    return Graph(gName, file, edgesAndNames.first, edgesAndNames.second, {}, {});
+    return Graph(false, gName, file, edgesAndNames.first, edgesAndNames.second, {}, {});
 }
 Graph GraphLoader::loadGraphFromCsvFile(const string& gName, const string& file) {
     RawCsvFileData csvData(file);
     auto edgesAndNames = namedEdgeListToEdgeListAndNodeNameList(csvData.namedEdgeList);
-    return Graph(gName, file, edgesAndNames.first, edgesAndNames.second, {}, {});
+    return Graph(false, gName, file, edgesAndNames.first, edgesAndNames.second, {}, {});
 }
 
 GraphLoader::RawGWFileData::RawGWFileData(const string& fileName, bool containsEdgeWeights) {
@@ -650,7 +652,7 @@ Graph GraphLoader::pruneG1FromG2(const Graph& G1, const Graph& G2, const vector<
             newEdgeWeights.push_back(newWeight);
         }
     }
-    return Graph(G2.getName(), G2.getFilePath(), newEdgeList, *(G2.getNodeNames()), 
+    return Graph(G2.directed, G2.getName(), G2.getFilePath(), newEdgeList, *(G2.getNodeNames()), 
                  newEdgeWeights, G2.colorsAsNodeColorNamePairs());
 #endif /* MULTI_PAIRWISE */
 }

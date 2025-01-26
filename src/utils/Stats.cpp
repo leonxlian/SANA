@@ -208,7 +208,7 @@ Boolean PearsonCompute(PEARSON *p)
 char *PearsonPrint(PEARSON *p) {
     static char buf[BUFSIZ];
     if(!p->computeValid) PearsonCompute(p);
-    sprintf(buf, "%d\t%.3g\t%.3g\t%.3g", p->n, p->rho, p->p, p->t);
+    snprintf(buf, sizeof(buf), "%d\t%.3g\t%.3g\t%.3g", p->n, p->rho, p->p, p->t);
     return buf;
 }
 

@@ -32,7 +32,7 @@ using namespace std;
   #endif
 #else
   #ifdef WEIGHT
-    #define EDGE_T short
+    #define EDGE_T unsigned short
   #else
     #define EDGE_T bool //unweighted graphs -- the normal/traditional setting
   #endif
@@ -52,7 +52,8 @@ public:
       Edges with weight 0 are not supported and will end in runtime_error
     - partialNodeColorPairs is a list of node/color name pairs.
       Any node not in any pair gets a special default color */
-    Graph(const string& name,
+    Graph(const bool directed,
+	  const string& name,
           const string& optionalFilePath,
           const vector<array<uint, 2>>& edgeList,
           const vector<string>& optionalNodeNames,
@@ -85,6 +86,7 @@ public:
     string getFilePath() const { return filePath; }
     uint getNumNodes() const { return adjLists.size(); }
     uint getNumEdges() const { return edgeList.size(); }
+    bool isDirected() const { return directed; }
     //note: edges with weight 0 are not supported
     bool hasEdge(uint node1, uint node2) const { return adjMatrix.get(node1, node2) != 0; }
     //returns 0 if there is no edge; the order of the arguments is irrelevant
@@ -163,6 +165,7 @@ public:
     Graph *otherGraph;
     Alignment *alignment;
 #endif
+    bool directed; // are the edges directed? false enforces a symmetric adjacency matrix
 
 private:
     string name, filePath;
