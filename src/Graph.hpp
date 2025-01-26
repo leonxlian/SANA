@@ -32,7 +32,7 @@ using namespace std;
   #endif
 #else
   #ifdef WEIGHT
-    #define EDGE_T unsigned short
+    #define EDGE_T short
   #else
     #define EDGE_T bool //unweighted graphs -- the normal/traditional setting
   #endif
@@ -64,7 +64,7 @@ public:
     //creating empty graphs and populating the data structures directly.
 
     //calling this function is the same as passing the parameter directly to the constructor,
-    //which is recommended. This function only exists in case you need to construct the (rest 
+    //which is recommended. This function only exists in case you need to construct the (rest
     //of the) graph before you can compute the colors (e.g., if the colors depend on the node names)
     void initColorDataStructs(const vector<array<string, 2>>& partialNodeColorPairs);
 
@@ -103,7 +103,7 @@ public:
     double getTotalWeight(uint node) const { return totalWeight[node]; }
     bool hasSelfLoop(uint node) const { return adjMatrix.get(node, node) != 0; }
 
-    
+
     //large data structures are returned as const pointers
     //recommendation: use the getters above instead, when possible
     const vector<uint>* getAdjList(uint node) const { return &adjLists.at(node); }
@@ -124,7 +124,7 @@ public:
     vector<uint> nodesAround(uint node, uint maxDist) const;
     bool hasSameNodeNamesAs(const Graph& other) const;
     vector<string> commonNodeNames(const Graph& other) const;
-    
+
     // COLOR SYSTEM
     //colors have arbitrary strings as names. internally, they also have a numeric
     //id starting from 0, used as index for data structures
@@ -139,11 +139,11 @@ public:
     bool hasColor(string colorName) const;
     uint getNodeColor(uint node) const;
     uint numColors() const;
-    
+
     //functions that are part of SANA's main loop. Defined here to allow inlining
     uint numNodesWithColor(uint colorId) const { return nodeGroupsByColor.at(colorId).size(); }
     const vector<uint>* getNodesWithColor(uint colorId) const { return &nodeGroupsByColor.at(colorId); }
-    static const string DEFAULT_COLOR_NAME; 
+    static const string DEFAULT_COLOR_NAME;
 
     //color ids are internal to each graph (i.e., color i in G1 may not have the same name as color i in G2)
     //this maps the color ids of this graph to the color ids of the other graph with the
@@ -187,8 +187,8 @@ private:
     vector<string> colorNames; //color index to color name
     unordered_map<string, uint> colorNameToId; //color name to color index
     vector<vector<uint>> nodeGroupsByColor; //color index to list of node indices
-    
+
     friend class SANA; //for convenience and speed(maybe?)
-}; 
+};
 
 #endif /* GRAPH_H */
