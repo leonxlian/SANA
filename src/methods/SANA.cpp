@@ -135,7 +135,7 @@ SANA::SANA(const Graph* G1, const Graph* G2,
     needAligEdges        = icsWeight > 0 or ecWeight > 0 or s3Weight > 0 or wecWeight > 0 or secWeight > 0 or mecWeight > 0 or f_betaWeight > 0;
     needEd               = edWeight > 0; //edge difference
     needEr               = erWeight > 0; //edge ratio
-    needEmin             = eminWeight > 0; //edge ratio
+    needEmin             = eminWeight > 0; //edgeMin (FlyWire challenge)
     needSquaredAligEdges = sesWeight > 0; //SES
     needExposedEdges     = eeWeight > 0 or MultiS3::denominator_type == MultiS3::ee_global; //EE; if needMS3, might use EE as denom
     needMS3              = ms3Weight > 0;
@@ -290,7 +290,7 @@ void SANA::initDataStructures() {
     if (needAligEdges or needSec) aligEdges = alig.computeNumAlignedEdges(*G1, *G2);
     if (needEd) edSum = EdgeDifference::getEdgeDifferenceSum(G1, G2, alig);
     if (needEr) erSum = eval(alig);
-    if (needEmin) eminSum = EdgeMin::getEdgeMinSum(G1, G2, alig);
+    if (needEmin) eminSum = eval(alig);
     if (needSquaredAligEdges) squaredAligEdges =
             ((SquaredEdgeScore*) MC->getMeasure("ses"))->numSquaredAlignedEdges(alig);
     if (needExposedEdges) EdgeExposure::numer = 
@@ -899,7 +899,7 @@ double SANA::scoreComparison(double newAligEdges, double newInducedEdges,
         newCurrentScore += ecWeight?ecWeight * (newAligEdges / g1Edges):0;
         newCurrentScore += edWeight?edWeight * EdgeDifference::adjustSumToTargetScore(G1,G2,newEdgeDifferenceSum):0;
         newCurrentScore += erWeight?erWeight * newEdgeRatioSum:0;
-        newCurrentScore += eminWeight?eminWeight * EdgeMin::adjustSumToTargetScore(G1,G2,newEdgeMinSum):0;
+        newCurrentScore += eminWeight?eminWeight * newEdgeMinSum:0;
         newCurrentScore += s3Weight?s3Weight * (newAligEdges / (g1Edges + newInducedEdges - newAligEdges)):0;
         newCurrentScore += icsWeight?icsWeight * (newAligEdges / newInducedEdges):0;
         newCurrentScore += secWeight?secWeight * (newAligEdges / g1Edges + newAligEdges / g2Edges)*0.5:0;
@@ -1255,72 +1255,66 @@ double SANA::edgeRatioIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
     return AccurateSum(ai,a);
 }
 
-double SANA::edgeMinIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
-    if (peg1 == peg2) return 0;
-    double edgeMinIncDiff = 0;
-    double c = 0;
-    // Subtract peg1-hole1, add peg1-hole2
-    for (uint nbr : G1->adjLists[peg1]) {
-        double r = EdgeMin::getAligEdgeScore(G1,peg1,nbr, G2,hole1,A[nbr]);
-        double y = -r - c; // the next 3 lines use some "magic" to recover double precision sums of single precision variables
-        double t = edgeMinIncDiff + y;
-        c = (t - edgeMinIncDiff) - y;
-        edgeMinIncDiff = t;
-	if(G1->directed) {
-	    double r = EdgeMin::getAligEdgeScore(G1,nbr,peg1, G2,A[nbr],hole1);
-	    double y = -r - c; // the next 3 lines use some "magic" to recover double precision sums of single precision variables
-	    double t = edgeMinIncDiff + y;
-	    c = (t - edgeMinIncDiff) - y;
-	    edgeMinIncDiff = t;
-	}
-        uint nbrHole = 0;
-        if (nbr == peg1) nbrHole = hole2;
-        else if (nbr == peg2) nbrHole = hole1;
-        else nbrHole = A[nbr];
 
-        r = EdgeMin::getAligEdgeScore(G1,peg1,nbr, G2,hole2,nbrHole);
-        y = r - c;
-        t = edgeMinIncDiff + y;
-        c = (t - edgeMinIncDiff) - y;
-        edgeMinIncDiff = t;
-	if(G1->directed) {
-	    r = EdgeMin::getAligEdgeScore(G1,nbr,peg1, G2,nbrHole,hole2);
-	    y = r - c;
-	    t = edgeMinIncDiff + y;
-	    c = (t - edgeMinIncDiff) - y;
-	    edgeMinIncDiff = t;
-	}
+double SANA::edgeMinIncChangeOp(uint peg, uint oldHole, uint newHole) {
+    assert(A[peg] == oldHole);
+    int ai=0, aSize=4*G1->getNumNodes(); // edges in both directions from everyone (including SELF!)
+    assert(aSize <= MAX_A_ARRAY);
+    for (uint nbr : G1->adjLists[peg]) {
+	if(nbr == peg) assert(A[nbr] == oldHole);
+        a[ai++] = -EdgeMin::getAligEdgeScore(G1,peg,nbr, G2,oldHole,A[nbr]);
+	// if the PEG has a self-loop, then moving it to newHole means we need to check for underlying self-loop at newHole;
+	// otherwise the underlying edge is between newHole and the (non-self) neighbor's aligned hole.
+        uint nbrHole = (nbr == peg) ? newHole : A[nbr];
+        a[ai++] =  EdgeMin::getAligEdgeScore(G1,peg,nbr, G2,newHole,nbrHole);
+	assert(ai<=aSize);
+    }
+    if(G1->directed) for (uint nbr : G1->injLists[peg]) {
+	if(nbr == peg) assert(A[nbr] == oldHole);
+	a[ai++] = -EdgeMin::getAligEdgeScore(G1,nbr,peg, G2,A[nbr],oldHole);
+        uint nbrHole = (nbr == peg) ? newHole : A[nbr];
+	a[ai++] =  EdgeMin::getAligEdgeScore(G1,nbr,peg, G2,nbrHole,newHole);
+	assert(ai<=aSize);
+    }
+    return AccurateSum(ai, a);
+}
+
+double SANA::edgeMinIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
+    assert(A[peg1] == hole1 && A[peg2] == hole2);
+    if (peg1 == peg2) return 0;
+    int ai=0, aSize=8*G1->getNumNodes(); // two pegs, each with edges in both directions from potentially everyone else
+    assert(aSize <= MAX_A_ARRAY);
+    // Subtract (peg1->hole1), add (peg1->hole2)
+    for (uint nbr : G1->adjLists[peg1]) {
+	if(nbr == peg1) assert(A[nbr] == hole1);
+        a[ai++] = -EdgeMin::getAligEdgeScore(G1,peg1,nbr, G2,hole1,A[nbr]);
+        uint nbrHole; if(nbr == peg1) nbrHole=hole2; else if(nbr==peg2) nbrHole=hole1; else nbrHole=A[nbr];
+        a[ai++] =  EdgeMin::getAligEdgeScore(G1,peg1,nbr, G2,hole2,nbrHole);
+	assert(ai<=aSize);
+    }
+    if(G1->directed) for (uint nbr : G1->injLists[peg1]) {
+	if(nbr == peg1) assert(A[nbr] == hole1);
+	a[ai++] = -EdgeMin::getAligEdgeScore(G1,nbr,peg1, G2,A[nbr],hole1);
+        uint nbrHole; if(nbr == peg1) nbrHole=hole2; else if(nbr==peg2) nbrHole=hole1; else nbrHole=A[nbr];
+        a[ai++] =  EdgeMin::getAligEdgeScore(G1,nbr,peg1, G2,nbrHole,hole2);
+	assert(ai<=aSize);
     }
    // Subtract peg2-hole2, add peg2-hole1
    for (uint nbr : G1->adjLists[peg2]) {
-        if (nbr == peg1) continue;
-        double r = EdgeMin::getAligEdgeScore(G1,peg2,nbr, G2,hole2,A[nbr]);
-        double y = -r - c;
-        double t = edgeMinIncDiff + y;
-        c = (t - edgeMinIncDiff) - y;
-        edgeMinIncDiff = t;
-	if(G1->directed) {
-	    double r = EdgeMin::getAligEdgeScore(G1,nbr,peg2, G2,A[nbr],hole2);
-	    double y = -r - c;
-	    double t = edgeMinIncDiff + y;
-	    c = (t - edgeMinIncDiff) - y;
-	    edgeMinIncDiff = t;
-	}
-        uint nbrHole = (nbr == peg2 ? hole1 : A[nbr]);
-        r = EdgeMin::getAligEdgeScore(G1,peg2,nbr, G2,hole1,nbrHole);
-        y = r - c;
-        t = edgeMinIncDiff + y;
-        c = (t - edgeMinIncDiff) - y;
-        edgeMinIncDiff = t;
-	if(G1->directed) {
-	    r = EdgeMin::getAligEdgeScore(G1,nbr,peg2, G2,nbrHole,hole1);
-	    y = r - c;
-	    t = edgeMinIncDiff + y;
-	    c = (t - edgeMinIncDiff) - y;
-	    edgeMinIncDiff = t;
-	}
+	if(nbr == peg2) assert(A[nbr] == hole2);
+        a[ai++] = -EdgeMin::getAligEdgeScore(G1,peg2,nbr, G2,hole2,A[nbr]);
+        uint nbrHole; if(nbr == peg2) nbrHole=hole1; else if(nbr==peg1) nbrHole=hole2; else nbrHole=A[nbr];
+        a[ai++] =  EdgeMin::getAligEdgeScore(G1,peg2,nbr, G2,hole1,nbrHole);
+	assert(ai<=aSize);
     }
-    return edgeMinIncDiff;
+    if(G1->directed) for (uint nbr : G1->injLists[peg2]) {
+	if(nbr == peg2) assert(A[nbr] == hole2);
+	a[ai++] = -EdgeMin::getAligEdgeScore(G1,nbr,peg2, G2,A[nbr],hole2);
+        uint nbrHole; if(nbr == peg2) nbrHole=hole1; else if(nbr==peg1) nbrHole=hole2; else nbrHole=A[nbr];
+        a[ai++] =  EdgeMin::getAligEdgeScore(G1,nbr,peg2, G2,nbrHole,hole1);
+	assert(ai<=aSize);
+    }
+    return AccurateSum(ai,a);
 }
 
 
@@ -1342,38 +1336,6 @@ double SANA::edgeDifferenceIncChangeOp(uint peg, uint oldHole, uint newHole) {
     return edgeDifferenceIncDiff;
 }
 
-double SANA::edgeMinIncChangeOp(uint peg, uint oldHole, uint newHole) {
-    double edgeMinIncDiff = 0;
-    double c = 0;
-    for (uint nbr : G1->adjLists[peg]) {
-        double r = EdgeMin::getAligEdgeScore(G1,peg,nbr, G2,oldHole,A[nbr]);
-        double y = -r - c;
-        double t = edgeMinIncDiff + y;
-        c = (t - edgeMinIncDiff) - y;
-        edgeMinIncDiff = t;
-	if(G1->directed) {
-	    double r = EdgeMin::getAligEdgeScore(G1,nbr,peg, G2,A[nbr],oldHole);
-	    double y = -r - c;
-	    double t = edgeMinIncDiff + y;
-	    c = (t - edgeMinIncDiff) - y;
-	    edgeMinIncDiff = t;
-	}
-        uint nbrHole = nbr == peg ? newHole : A[nbr];
-        r = EdgeMin::getAligEdgeScore(G1,peg,nbr, G2,newHole,nbrHole);
-        y = r - c;
-        t = edgeMinIncDiff + y;
-        c = (t - edgeMinIncDiff) - y;
-        edgeMinIncDiff = t;
-	if(G1->directed) {
-	    r = EdgeMin::getAligEdgeScore(G1,nbr,peg, G2,nbrHole,newHole);
-	    y = r - c;
-	    t = edgeMinIncDiff + y;
-	    c = (t - edgeMinIncDiff) - y;
-	    edgeMinIncDiff = t;
-	}
-    }
-    return edgeMinIncDiff;
-}
 
 // UGLY GORY HACK BELOW!! Sometimes the edgeVal is crazily wrong, like way above 1,000, when it
 // cannot possibly be greater than the number of networks we're aligning when MULTI_PAIRWISE is on.
