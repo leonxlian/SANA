@@ -1190,60 +1190,69 @@ double SANA::edgeDifferenceIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole
     return edgeDifferenceIncDiff;
 }
 
-// magic numerical analysis that gets an accurate sum by accounting for roundoff
+#define MALE_FLY_EDGES 4158055
+#define MAX_A_ARRAY (8*MALE_FLY_EDGES)
+static double a[MAX_A_ARRAY];
+
 double SANA::edgeRatioIncChangeOp(uint peg, uint oldHole, uint newHole) {
     assert(A[peg] == oldHole);
-    int aSize=4*G1->getNumNodes(); // edges in both directions from everyone (including SELF!)
-    vector<double> a; a.reserve(aSize);
+    int ai=0, aSize=4*G1->getNumNodes(); // edges in both directions from everyone (including SELF!)
+    assert(aSize <= MAX_A_ARRAY);
     for (uint nbr : G1->adjLists[peg]) {
 	if(nbr == peg) assert(A[nbr] == oldHole);
-        a.push_back(-EdgeRatio::getAligEdgeScore(G1,peg,nbr, G2,oldHole,A[nbr]));
+        a[ai++] = -EdgeRatio::getAligEdgeScore(G1,peg,nbr, G2,oldHole,A[nbr]);
 	// if the PEG has a self-loop, then any underlying self-loop is at newHole, otherwise
 	// the underlying edge is between newHole and the true neighbor's aligned hole.
         uint nbrHole = (nbr == peg) ? newHole : A[nbr];
-        a.push_back(EdgeRatio::getAligEdgeScore(G1,peg,nbr, G2,newHole,nbrHole));
+        a[ai++] = EdgeRatio::getAligEdgeScore(G1,peg,nbr, G2,newHole,nbrHole);
+	assert(ai<=aSize);
     }
     if(G1->directed) for (uint nbr : G1->injLists[peg]) {
 	if(nbr == peg) assert(A[nbr] == oldHole);
-	a.push_back(-EdgeRatio::getAligEdgeScore(G1,nbr,peg, G2,A[nbr],oldHole));
+	a[ai++] = -EdgeRatio::getAligEdgeScore(G1,nbr,peg, G2,A[nbr],oldHole);
         uint nbrHole = (nbr == peg) ? newHole : A[nbr];
-	a.push_back(EdgeRatio::getAligEdgeScore(G1,nbr,peg, G2,nbrHole,newHole));
+	a[ai++] =  EdgeRatio::getAligEdgeScore(G1,nbr,peg, G2,nbrHole,newHole);
+	assert(ai<=aSize);
     }
-    return AccurateSum(a);
+    return AccurateSum(ai, a);
 }
 
 double SANA::edgeRatioIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
     assert(A[peg1] == hole1 && A[peg2] == hole2);
     if (peg1 == peg2) return 0;
-    int aSize=8*G1->getNumNodes(); // two pegs, each with edges in both directions from potentially everyone else
-    vector<double> a; a.reserve(aSize);
+    int ai=0, aSize=8*G1->getNumNodes(); // two pegs, each with edges in both directions from potentially everyone else
+    assert(aSize <= MAX_A_ARRAY);
     // Subtract (peg1->hole1), add (peg1->hole2)
     for (uint nbr : G1->adjLists[peg1]) {
 	if(nbr == peg1) assert(A[nbr] == hole1);
-        a.push_back(-EdgeRatio::getAligEdgeScore(G1,peg1,nbr, G2,hole1,A[nbr]));
+        a[ai++] = -EdgeRatio::getAligEdgeScore(G1,peg1,nbr, G2,hole1,A[nbr]);
         uint nbrHole; if(nbr == peg1) nbrHole=hole2; else if(nbr==peg2) nbrHole=hole1; else nbrHole=A[nbr];
-        a.push_back(EdgeRatio::getAligEdgeScore(G1,peg1,nbr, G2,hole2,nbrHole));
+        a[ai++] =  EdgeRatio::getAligEdgeScore(G1,peg1,nbr, G2,hole2,nbrHole);
+	assert(ai<=aSize);
     }
     if(G1->directed) for (uint nbr : G1->injLists[peg1]) {
 	if(nbr == peg1) assert(A[nbr] == hole1);
-	a.push_back(-EdgeRatio::getAligEdgeScore(G1,nbr,peg1, G2,A[nbr],hole1));
+	a[ai++] = -EdgeRatio::getAligEdgeScore(G1,nbr,peg1, G2,A[nbr],hole1);
         uint nbrHole; if(nbr == peg1) nbrHole=hole2; else if(nbr==peg2) nbrHole=hole1; else nbrHole=A[nbr];
-        a.push_back(EdgeRatio::getAligEdgeScore(G1,nbr,peg1, G2,nbrHole,hole2));
+        a[ai++] =  EdgeRatio::getAligEdgeScore(G1,nbr,peg1, G2,nbrHole,hole2);
+	assert(ai<=aSize);
     }
    // Subtract peg2-hole2, add peg2-hole1
    for (uint nbr : G1->adjLists[peg2]) {
 	if(nbr == peg2) assert(A[nbr] == hole2);
-        a.push_back(-EdgeRatio::getAligEdgeScore(G1,peg2,nbr, G2,hole2,A[nbr]));
+        a[ai++] = -EdgeRatio::getAligEdgeScore(G1,peg2,nbr, G2,hole2,A[nbr]);
         uint nbrHole; if(nbr == peg2) nbrHole=hole1; else if(nbr==peg1) nbrHole=hole2; else nbrHole=A[nbr];
-        a.push_back(EdgeRatio::getAligEdgeScore(G1,peg2,nbr, G2,hole1,nbrHole));
+        a[ai++] =  EdgeRatio::getAligEdgeScore(G1,peg2,nbr, G2,hole1,nbrHole);
+	assert(ai<=aSize);
     }
     if(G1->directed) for (uint nbr : G1->injLists[peg2]) {
 	if(nbr == peg2) assert(A[nbr] == hole2);
-	a.push_back(-EdgeRatio::getAligEdgeScore(G1,nbr,peg2, G2,A[nbr],hole2));
+	a[ai++] = -EdgeRatio::getAligEdgeScore(G1,nbr,peg2, G2,A[nbr],hole2);
         uint nbrHole; if(nbr == peg2) nbrHole=hole1; else if(nbr==peg1) nbrHole=hole2; else nbrHole=A[nbr];
-        a.push_back(EdgeRatio::getAligEdgeScore(G1,nbr,peg2, G2,nbrHole,hole1));
+        a[ai++] =  EdgeRatio::getAligEdgeScore(G1,nbr,peg2, G2,nbrHole,hole1);
+	assert(ai<=aSize);
     }
-    return AccurateSum(a);
+    return AccurateSum(ai,a);
 }
 
 double SANA::edgeMinIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {

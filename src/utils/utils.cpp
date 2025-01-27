@@ -90,15 +90,14 @@ void normalizeWeights(vector<double>& weights) {
 }
 
 // magic numerical analysis that gets an accurate sum by accounting for roundoff
-double AccurateSum(const vector<double>& weights) {
-    uint n = weights.size();
-    assert(n>0);
-    double sum=0, c = 0;
-    for (uint i=0; i<n; i++) {
-        double r = weights[i], y = r - c, t = sum + y;
+double AccurateSum(int n, double *a) {
+    double sum=0, c = 0, cheap=0.0;
+    for (int i=0; i<n; i++) {
+	cheap+=a[i];
+        double r = a[i], y = r - c, t = sum + y;
         c = (t - sum) - y; sum = t;
     }
-    assert(sum>0);
+    assert(fabs(sum)<1e-6 || fabs((cheap-sum)/sum)<1e-6);
     return sum;
 }
 
