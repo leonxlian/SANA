@@ -28,20 +28,24 @@ double EdgeRatio::getAligEdgeScore(const Graph* G1, const uint u1, const uint v1
     return getRatio(G1->getEdgeWeight(u1, v1), G2->getEdgeWeight(u2, v2)) / G1->getNumEdges();
 }
 
+#define MALE_FLY_EDGES 4158055
+#define MAX_A_ARRAY (8*MALE_FLY_EDGES)
+static double a[MAX_A_ARRAY];
 
 double EdgeRatio::getEdgeRatioSum(const Graph *G1, const Graph *G2, const Alignment &A) {
 #ifndef WEIGHT
     return 0;
 #else
-    vector<double> weights;
-    weights.reserve(G1->getNumEdges());
+    int ai=0, aSize=G1->getNumEdges();
+    assert(aSize <= MAX_A_ARRAY);
     for (const auto& edge : *(G1->getEdgeList())) {
 	uint node1 = edge[0], node2 = edge[1];
-	weights.push_back(getAligEdgeScore(G1,node1,node2, G2,A[node1],A[node2]));
+	a[ai++] = getAligEdgeScore(G1,node1,node2, G2,A[node1],A[node2]);
 	// We don't need to include the reverse edge here in the directed graph case, because *if* a reverse edge of
 	// (u,v) exists, it's actually *in* this edgeList.
+	assert(ai<=aSize);
     }
-    return AccurateSum(weights);
+    return AccurateSum(ai, a);
 #endif
 }
 
