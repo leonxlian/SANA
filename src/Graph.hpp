@@ -27,7 +27,8 @@ using namespace std;
   #ifdef WEIGHT
     #error currently, MULTI_* is not designed for float edges
   #else
-    #define EDGE_T unsigned char //change to unsigned short for >256 networks
+    // #define EDGE_T unsigned char //change to unsigned short for >256 networks
+    #define EDGE_T float //change to unsigned short for >256 networks
   #endif
 #else
   #ifdef WEIGHT
