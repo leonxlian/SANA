@@ -7,11 +7,13 @@ public:
     EdgeMin(const Graph* G1, const Graph* G2);
     virtual ~EdgeMin();
     double eval(const Alignment& A);
+    static double scoreOnePeg(const Graph* G1, const uint peg1, const uint avoidPeg, const Graph* G2, const uint hole,
+	const Alignment& A);
     static double getAligEdgeScore(const Graph* G1, const uint u1, const uint v1, const Graph* G2, const uint u2, const uint v2);
 private:
     static double denominator;
-    static double computeDenom(const Graph* G1, const Graph* G2);
-    static double getEdgeMinSum(const Graph *G1, const Graph *G2, const Alignment &A);
+    double computeDenom(const Graph* G1, const Graph* G2);
+    double getEdgeMinSum(const Graph *G1, const Graph *G2, const Alignment &A);
 };
 
 #endif //EDGEDIFFERENCE_HPP
