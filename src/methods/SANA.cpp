@@ -481,12 +481,14 @@ Alignment SANA::runUsingConfidenceIntervals() {
 				printf(" ++++> temp %.4g, batchMeanScore %.3f (pBad %.3g) still increasing after %d batches; reset batches and continue\n",
 				Temperature, StatMean(scoreBatchMeans),
 				StatConfInterval(pBadBatchMeans,  confidence), StatNumSamples(scoreBatchMeans));
+			    fflush(stdout);
 			    previousScore = StatMean(scoreBatchMeans);
 			    lastBatchCount = 0; StatReset(scoreBatchMeans); StatReset(pBadBatchMeans);
 			} else if(tauStep>MIN_TAU_STEP && StatNumSamples(scoreBatchMeans) >= HAPPY_BATCHES+lastBatchCount) {
 			    if(verbose)
 				printf(" ----> %d batches, avg score %g decreased at tau %g; reduce next tauStep from %g",
 				    StatNumSamples(scoreBatchMeans), StatMean(scoreBatchMeans), tau, tauStep);
+			    fflush(stdout);
 			    // tau -= tauStep;
 			    tauStep *= 2.0/3.0;
 			    if(tauStep < MIN_TAU_STEP) tauStep = MIN_TAU_STEP;
@@ -511,6 +513,7 @@ Alignment SANA::runUsingConfidenceIntervals() {
 	    else if(StatMean(scoreBatchMeans) + 0.00 < previousScore) {
 		if(verbose) printf(" !!!!!> score %g is stuck below previous %g; skip region by increasing tauStep from %g",
 		    StatMean(scoreBatchMeans), previousScore, tauStep);
+		fflush(stdout);
 		tauStep *= 10; // if the score is not increasing... skip this region
 		if(tauStep > MAX_TAU_STEP) tauStep = MAX_TAU_STEP;
 		if(verbose) printf(" to %g\n", tauStep);
@@ -2297,6 +2300,7 @@ void SANA::trackProgress(long long int iter, double fractionTime, int batches, d
 	acceptingProbability(avgEnergyInc, Temperature), incrementalMeanPBad());
     if(batches) printf(" batches %d bSc %.3g", batches, batchScore);
     printf("\n");
+    fflush(stdout);
 #endif
     bool checkScores = true;
     if (checkScores) {
