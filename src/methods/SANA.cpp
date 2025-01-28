@@ -44,6 +44,8 @@
 
 using namespace std;
 
+static double _predictedScore1, _predictedScore2, _whichMove;
+
 //static fields
 bool SANA::saveAligAndExitOnInterruption = false;
 bool SANA::saveAligAndContOnInterruption = false;
@@ -438,6 +440,12 @@ Alignment SANA::runUsingConfidenceIntervals() {
 	    if (saveAligAndContOnInterruption) printReportOnInterruption();
 
 	    SANAIteration();
+	    double correct = eval(A);
+	    if(currentScore != correct) {
+		printf("iter %u move %g currentScore %g; correct %g; diff %g\n", iterationsPerformed,
+		    _whichMove, currentScore, correct, currentScore-correct); //_predictedScore1, _predictedScore2, diff1,diff2);
+		//currentScore = correct;
+	    }
 	    StatAddSample(scoreBatch, currentScore);
 	    StatAddSample(pBadBatch, movePbad);
 	    if(StatNumSamples(scoreBatch) == batchSize) {
@@ -1258,6 +1266,7 @@ double SANA::edgeRatioIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
 
 double SANA::edgeMinIncChangeOp(uint peg, uint oldHole, uint newHole) {
     assert(A[peg] == oldHole);
+    _whichMove=0;
     int ai=0, aSize=4*G1->getNumNodes(); // edges in both directions from everyone (including SELF!)
     assert(aSize <= MAX_A_ARRAY);
     for (uint nbr : G1->adjLists[peg]) {
@@ -1276,12 +1285,20 @@ double SANA::edgeMinIncChangeOp(uint peg, uint oldHole, uint newHole) {
 	a[ai++] =  EdgeMin::getAligEdgeScore(G1,nbr,peg, G2,nbrHole,newHole);
 	assert(ai<=aSize);
     }
-    return AccurateSum(ai, a);
+    double noAvoid = G1->getNumNodes();
+    double before = EdgeMin::scoreOnePeg(G1,peg,noAvoid, G2, oldHole, A);
+    double after  = EdgeMin::scoreOnePeg(G1,peg,noAvoid, G2, newHole, A);
+    double old = AccurateSum(ai, a);
+    if(fabs(after-before-old)<1e-19) return old;
+    printf("old %g Marcus %g diff %g\n", old, after-before, after-before-old);
+    assert(false);
+    return 0;
 }
 
 double SANA::edgeMinIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
+    assert (peg1 != peg2);
     assert(A[peg1] == hole1 && A[peg2] == hole2);
-    if (peg1 == peg2) return 0;
+    _whichMove=1;
     int ai=0, aSize=8*G1->getNumNodes(); // two pegs, each with edges in both directions from potentially everyone else
     assert(aSize <= MAX_A_ARRAY);
     // Subtract (peg1->hole1), add (peg1->hole2)
@@ -1314,7 +1331,24 @@ double SANA::edgeMinIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
         a[ai++] =  EdgeMin::getAligEdgeScore(G1,nbr,peg2, G2,nbrHole,hole1);
 	assert(ai<=aSize);
     }
-    return AccurateSum(ai,a);
+    double here =  AccurateSum(ai,a);
+    double other = edgeMinIncSwapOp2(peg1, peg2, hole1, hole2);
+    _predictedScore1 = currentScore + here;
+    _predictedScore2 = currentScore + other;
+    //if(fabs((other-here)) > 1e-8) printf("oldIncSwap = %g, new = %g, diff = %g \n", here, other, other-here);
+    return here;
+}
+
+
+double SANA::edgeMinIncSwapOp2(uint peg1, uint peg2, uint hole1, uint hole2) {
+    assert(A[peg1] == hole1 && A[peg2] == hole2);
+    if (peg1 == peg2) return 0;
+    double noAvoid = G1->getNumNodes();
+    double old = EdgeMin::scoreOnePeg(G1,peg1,noAvoid, G2, hole1, A); // score outward and inward A-aligned edges of peg1
+    old       += EdgeMin::scoreOnePeg(G1,peg2,peg1,    G2, hole2, A); // score out&in as above for peg2 EXCEPT if going to peg1
+    double New = EdgeMin::scoreOnePeg(G1,peg2,noAvoid, G2, hole1, A); // score outward and inward aligned edges of peg1
+    New       += EdgeMin::scoreOnePeg(G1,peg1,peg2,    G2, hole2, A); // score out&in as above for peg2 EXCEPT if going to peg1
+    return New-old;
 }
 
 
@@ -2321,6 +2355,7 @@ void SANA::initIterPerSecond() {
     double totalIps = 0.0;
     int ipsListSize = 0;
     if (ipsList.size() != 0) {
+	cout << "ipsList\n"; 
         for (pair<double,double> ipsPair : ipsList) {
             if (TFinal <= ipsPair.first && ipsPair.first <= TInitial) {
                 totalIps+=ipsPair.second;
@@ -2330,8 +2365,8 @@ void SANA::initIterPerSecond() {
         totalIps = totalIps / (double) ipsListSize;
     } else {
         Temperature = TInitial;
-        //cout << "Since temperature goldilocks is provided, ips will be calculated using constantTempIterations at temperature " << Temperature << endl;
-        long long int iter = 1E6;
+        cout << "Since temperature goldilocks is provided, ips will be calculated using constantTempIterations at temperature " << Temperature << endl;
+        long long int iter = 1E5;
         constantTempIterations(iter - 1);
         double res = iter/timer.elapsed();
         totalIps = res;
