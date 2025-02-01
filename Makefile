@@ -53,6 +53,9 @@ ifeq ($(WEIGHT), 1)
     ifdef EDGE_T
 	SUFFIX=.$(EDGE_T)
 	CXXFLAGS := $(CXXFLAGS) "-DEDGE_T=$(EDGE_T)"
+    else
+	ERROR="WEIGHT needs EDGE_T to be defined"
+	MAIN=error
     endif
     MAIN := $(MAIN).weight$(SUFFIX)
 endif
