@@ -50,7 +50,11 @@ endif
 
 ifeq ($(WEIGHT), 1)
     CXXFLAGS := $(CXXFLAGS) -DWEIGHT
-    MAIN := $(MAIN).weight
+    ifdef EDGE_T
+	SUFFIX=.$(EDGE_T)
+	CXXFLAGS := $(CXXFLAGS) "-DEDGE_T=$(EDGE_T)"
+    endif
+    MAIN := $(MAIN).weight$(SUFFIX)
 endif
 
 ######## THIS ONE MUST BE LAST to ensure "MAIN=error" when an incompatible combination occurs ##################
