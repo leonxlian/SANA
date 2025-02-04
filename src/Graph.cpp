@@ -79,7 +79,7 @@ Graph::Graph(const bool directed, const string& graphName, const string& optiona
         else weight = optionalEdgeWeights[i];
         if (weight == 0) throw runtime_error("edges with weight 0 are not supported");
 	if((directed && adjMatrix[node1][node2]) || (!directed && (adjMatrix[node1][node2] or adjMatrix[node2][node1])))
-            throw runtime_error("repeated edge ("+nodeNames[node1]+","+nodeNames[node2]+") in edge list passed to graph constructor");
+            throw runtime_error("repeated edge ("+nodeNames[node1]+","+nodeNames[node2]+") in edge list passed to graph constructor; did you mean to specify \"-directed\"?");
         adjMatrix[node1][node2] = weight; totalWeight[node1] += weight;
         if(!directed) {
 	    adjMatrix[node2][node1] = weight;
