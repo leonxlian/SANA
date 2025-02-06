@@ -50,13 +50,11 @@ endif
 
 ifeq ($(WEIGHT), 1)
     CXXFLAGS := $(CXXFLAGS) -DWEIGHT
-    ifdef EDGE_T
-	SUFFIX=.$(EDGE_T)
-	CXXFLAGS := $(CXXFLAGS) "-DEDGE_T=$(EDGE_T)"
-    else
-	ERROR="WEIGHT needs EDGE_T to be defined"
-	MAIN=error
+    ifndef EDGE_T
+	EDGE_T=float
     endif
+    SUFFIX=.$(EDGE_T)
+    CXXFLAGS := $(CXXFLAGS) "-DEDGE_T=$(EDGE_T)"
     MAIN := $(MAIN).weight$(SUFFIX)
 endif
 
