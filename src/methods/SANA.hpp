@@ -60,7 +60,7 @@ private:
     Alignment startA;
 
     bool addHillClimbing; //for post-run hill climbing
-    bool multi_iteration_only; // if true, skip optional CPU-wasting steps
+    bool multi_iteration_only=false; // if true, skip optional CPU-wasting steps
     void performHillClimbing(long long int idleCountTarget);
 
     //temperature goldilocks
