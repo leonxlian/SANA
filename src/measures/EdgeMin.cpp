@@ -21,12 +21,9 @@ double EdgeMin::eval(const Alignment& A) {
 #endif
 }
 
-static int _smallerEdge, _minEdgeSum;
-
 double EdgeMin::getAligEdgeScore(const Graph* G1, const uint u1, const uint v1, const Graph* G2, const uint u2, const uint v2){
     // The maximum possible score is attained during a correct self-alignment, in which case every edge has a ratio of 1.
-    int smaller = min(G1->getEdgeWeight(u1, v1), G2->getEdgeWeight(u2, v2));
-    _smallerEdge = smaller;
+    double smaller = min(G1->getEdgeWeight(u1, v1), G2->getEdgeWeight(u2, v2));
     return smaller / EdgeMin::denominator;
 }
 
