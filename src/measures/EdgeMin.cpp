@@ -28,11 +28,7 @@ double EdgeMin::computeDenom(const Graph* G1, const Graph* G2) {
 }
 
 double EdgeMin::eval(const Alignment& A) {
-#ifndef WEIGHT
-    return kErrorScore;
-#else
     return computeSum(A);
-#endif
 }
 
 double EdgeMin::getAligEdgeScore(const uint peg1, const uint peg2, const uint hole1, const uint hole2) {
