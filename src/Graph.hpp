@@ -20,22 +20,30 @@
 class Alignment;
 #endif
 
+#if __APPLE__ || __MACOS__
+typedef unsigned char uchar;
+typedef unsigned short ushort;
+typedef unsigned int uint;
+typedef unsigned long ulong;
+#endif
+
 using namespace std;
 
 //EDGE_T: macro specifying the type of the edge weights
-#if defined(MULTI_PAIRWISE) || defined(MULTI_MPI)
-  #ifdef WEIGHT
-    #error currently, MULTI_* is not designed for float edges
-  #else
-    // #define EDGE_T unsigned char //change to unsigned short for >256 networks
-    #define EDGE_T float //change to unsigned short for >256 networks
-  #endif
-#else
-  #ifdef WEIGHT
-    #define EDGE_T unsigned char // I've clipped FlyWire edge weights at 255
-  #else
-    #define EDGE_T bool //unweighted graphs -- the normal/traditional setting
-  #endif
+#if !defined(EDGE_T)
+    #if defined(MULTI_PAIRWISE) || defined(MULTI_MPI)
+	#ifdef WEIGHT
+	    #error currently, MULTI_* is not designed for float edges
+	#else
+	    #define EDGE_T unsigned char //change to unsigned short for >256 networks
+	#endif
+    #else
+	#ifdef WEIGHT
+	    #define EDGE_T float // unsigned char // I've clipped FlyWire edge weights at 255
+	#else
+	    #define EDGE_T bool //unweighted graphs -- the normal/traditional setting
+	#endif
+    #endif
 #endif
 
 class Graph {

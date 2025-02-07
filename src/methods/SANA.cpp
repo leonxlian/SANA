@@ -44,7 +44,10 @@
 
 using namespace std;
 
-static double _predictedScore1, _predictedScore2, _whichMove;
+#define DEBUG_EDGEMIN 0
+#if DEBUG_EDGEMIN
+static double _predictedScore1, _predictedScore2;
+#endif
 
 //static fields
 bool SANA::saveAligAndExitOnInterruption = false;
@@ -291,8 +294,8 @@ void SANA::initDataStructures() {
 
     if (needAligEdges or needSec) aligEdges = alig.computeNumAlignedEdges(*G1, *G2);
     if (needEd) edSum = EdgeDifference::getEdgeDifferenceSum(G1, G2, alig);
-    if (needEr) erSum = eval(alig);
-    if (needEmin) eminSum = eval(alig);
+    if (needEr) erSum = EdgeRatio::getEdgeRatioSum(G1, G2, alig);
+    if (needEmin) eminSum = EdgeMin::getEdgeMinSum(G1, G2, alig);
     if (needSquaredAligEdges) squaredAligEdges =
             ((SquaredEdgeScore*) MC->getMeasure("ses"))->numSquaredAlignedEdges(alig);
     if (needExposedEdges) EdgeExposure::numer = 
@@ -439,13 +442,19 @@ Alignment SANA::runUsingConfidenceIntervals() {
 	    if (saveAligAndExitOnInterruption) break;
 	    if (saveAligAndContOnInterruption) printReportOnInterruption();
 
+	    //currentScore = eval(A);
 	    SANAIteration();
-	    double correct = eval(A);
-	    if(currentScore != correct) {
-		printf("iter %u move %g currentScore %g; correct %g; diff %g\n", iterationsPerformed,
-		    _whichMove, currentScore, correct, currentScore-correct); //_predictedScore1, _predictedScore2, diff1,diff2);
-		//currentScore = correct;
+#if DEBUG_EDGEMIN
+	    if(iterationsPerformed % 20000 == 20000) {
+		double correct = eval(A);
+		printf("."); fflush(stdout);
+		if(fabs(currentScore - correct) > 4e-16) {
+		    printf("iter %u currentScore %g; correct %g; diff %g\n", iterationsPerformed,
+			currentScore, correct, currentScore-correct); //_predictedScore1, _predictedScore2, diff1,diff2);
+		    //currentScore = correct;
+		}
 	    }
+#endif
 	    StatAddSample(scoreBatch, currentScore);
 	    StatAddSample(pBadBatch, movePbad);
 	    if(StatNumSamples(scoreBatch) == batchSize) {
@@ -589,6 +598,7 @@ double SANA::incrementalMeanPBad() {
 }
 
 double SANA::slowMeanPBad() {
+    assert(numPBadsInBuffer>0);
     double sum = 0;
     for (int i = 0; i < numPBadsInBuffer; i++) sum += pBadBuffer[i];
     return sum/(double) numPBadsInBuffer;
@@ -919,11 +929,13 @@ double SANA::scoreComparison(double newAligEdges, double newInducedEdges,
         newCurrentScore += jsWeight?jsWeight * (newJsSum):0;
         newCurrentScore += ewecWeight?ewecWeight * (newEwecSum):0;
         newCurrentScore += ncWeight?ncWeight * (newNcSum / trueAWithValidCountAppended.back()):0;
-        if(beta_value==inf){
-            newCurrentScore += f_betaWeight?f_betaWeight * (newAligEdges / newInducedEdges):0;
-        }else{
-            newCurrentScore += f_betaWeight?f_betaWeight * (((1 + (beta_value * beta_value)) * newAligEdges) / (g1Edges + (beta_value * beta_value * newInducedEdges))) : 0;
-        }
+	if(f_betaWeight) {
+	    if(beta_value==inf){
+		newCurrentScore += f_betaWeight * (newAligEdges / newInducedEdges);
+	    }else{
+		newCurrentScore += f_betaWeight * (((1 + (beta_value * beta_value)) * newAligEdges) / (g1Edges + (beta_value * beta_value * newInducedEdges)));
+	    }
+	}
         
 #if defined(MULTI_PAIRWISE) || defined(MULTI_MPI)
         newCurrentScore += mecWeight?mecWeight * (newAligEdges / (g1TotalWeight + g2TotalWeight)):0;
@@ -947,11 +959,13 @@ double SANA::scoreComparison(double newAligEdges, double newInducedEdges,
         newCurrentScore *= wecWeight?wecWeight * (newWecSum / (2 * g1Edges)):0;
         newCurrentScore *= jsWeight?jsWeight * (newJsSum):0;
         newCurrentScore *= ncWeight?ncWeight * (newNcSum / trueAWithValidCountAppended.back()):0;
-        if(beta_value==inf){
-            newCurrentScore *= f_betaWeight?f_betaWeight * (newAligEdges / newInducedEdges):0;
-        }else{
-            newCurrentScore *= f_betaWeight?f_betaWeight * (((1 + (beta_value * beta_value)) * newAligEdges) / (g1Edges + (beta_value * beta_value * newInducedEdges))) : 0;
-        }
+	if(f_betaWeight) {
+	    if(beta_value==inf){
+		newCurrentScore *= f_betaWeight * (newAligEdges / newInducedEdges);
+	    }else{
+		newCurrentScore *= f_betaWeight * (((1 + (beta_value * beta_value)) * newAligEdges) / (g1Edges + (beta_value * beta_value * newInducedEdges)));
+	    }
+	}
 
         energyInc = newCurrentScore - currentScore;
         wasBadMove = energyInc < 0;
@@ -962,9 +976,7 @@ double SANA::scoreComparison(double newAligEdges, double newInducedEdges,
         // this is a terrible way to compute the max; we should loop through all of them and figure out which is the biggest
         // and in fact we haven't yet integrated icsWeight here yet, so assert so
         assert(icsWeight == 0.0);
-        if(beta_value==inf){
-            assert(f_betaWeight == 0.0);
-        }
+	if(f_betaWeight && beta_value==inf) throw runtime_error("SANA::scoreComparison: beta inconsistency");
         // double energyInc = max(ncWeight* (newNcSum / trueAWithValidCountAppended.back() - ncSum / trueAWithValidCountAppended.back()), max(max(ecWeight*(newAligEdges / g1Edges - aligEdges / g1Edges), max( s3Weight*((newAligEdges / (g1Edges + newInducedEdges - newAligEdges) - (aligEdges / (g1Edges + inducedEdges - aligEdges)))), secWeight*0.5*(newAligEdges / g1Edges - aligEdges / g1Edges + newAligEdges / g2Edges - aligEdges / g2Edges))), max(localWeight*((newLocalScoreSum / n1) - (localScoreSum)), max(wecWeight*(newWecSum / (2 * g1Edges) - wecSum / (2 * g1Edges)), jsWeight*(newJsSum - jsSum)))));
 
         newCurrentScore += ecWeight?ecWeight * (newAligEdges / g1Edges):0;
@@ -975,11 +987,13 @@ double SANA::scoreComparison(double newAligEdges, double newInducedEdges,
         newCurrentScore += wecWeight?wecWeight * (newWecSum / (2 * g1Edges)):0;
         newCurrentScore += jsWeight?jsWeight * (newJsSum):0;
         newCurrentScore += ncWeight?ncWeight * (newNcSum / trueAWithValidCountAppended.back()):0;
-        if(beta_value==inf){
-            newCurrentScore += f_betaWeight?f_betaWeight * (newAligEdges / newInducedEdges):0;
-        }else{
-            newCurrentScore += f_betaWeight?f_betaWeight * (((1 + (beta_value * beta_value)) * newAligEdges) / (g1Edges + (beta_value * beta_value * newInducedEdges))) : 0;
-        }
+	if(f_betaWeight) {
+	    if(beta_value==inf){
+		newCurrentScore += f_betaWeight * (newAligEdges / newInducedEdges);
+	    }else{
+		newCurrentScore += f_betaWeight * (((1 + (beta_value * beta_value)) * newAligEdges) / (g1Edges + (beta_value * beta_value * newInducedEdges)));
+	    }
+	}
         
         energyInc = newCurrentScore - currentScore;
         wasBadMove = energyInc < 0;
@@ -989,9 +1003,7 @@ double SANA::scoreComparison(double newAligEdges, double newInducedEdges,
     {
         // see comment above in max
         assert(icsWeight == 0.0);
-        if(beta_value==inf){
-            assert(f_betaWeight == 0.0);
-        }
+	if(f_betaWeight && beta_value==inf) throw runtime_error("SANA::scoreComparison: beta inconsistency");
         //double energyInc = min(ncWeight* (newNcSum / trueAWithValidCountAppended.back() - ncSum / trueAWithValidCountAppended.back()), min(min(ecWeight*(newAligEdges / g1Edges - aligEdges / g1Edges), min( s3Weight*((newAligEdges / (g1Edges + newInducedEdges - newAligEdges) - (aligEdges / (g1Edges + inducedEdges - aligEdges)))), secWeight*0.5*(newAligEdges / g1Edges - aligEdges / g1Edges + newAligEdges / g2Edges - aligEdges / g2Edges))), min(localWeight*((newLocalScoreSum / n1) - (localScoreSum)), min(wecWeight*(newWecSum / (2 * g1Edges) - wecSum / (2 * g1Edges)), jsWeight*(newJsSum - jsSum)))));
 
         newCurrentScore += ecWeight?ecWeight * (newAligEdges / g1Edges):0;
@@ -1002,11 +1014,13 @@ double SANA::scoreComparison(double newAligEdges, double newInducedEdges,
         newCurrentScore += wecWeight?wecWeight * (newWecSum / (2 * g1Edges)):0;
         newCurrentScore += jsWeight?jsWeight * (newJsSum):0;
         newCurrentScore += ncWeight?ncWeight * (newNcSum / trueAWithValidCountAppended.back()):0;
-        if(beta_value==inf){
-            newCurrentScore += f_betaWeight?f_betaWeight * (newAligEdges / newInducedEdges):0;
-        }else{
-            newCurrentScore += f_betaWeight?f_betaWeight * (((1 + (beta_value * beta_value)) * newAligEdges) / (g1Edges + (beta_value * beta_value * newInducedEdges))) : 0;
-        }
+	if(f_betaWeight) {
+	    if(beta_value==inf){
+		newCurrentScore += f_betaWeight * (newAligEdges / newInducedEdges);
+	    }else{
+		newCurrentScore += f_betaWeight * (((1 + (beta_value * beta_value)) * newAligEdges) / (g1Edges + (beta_value * beta_value * newInducedEdges)));
+	    }
+	}
 
         energyInc = newCurrentScore - currentScore;
         wasBadMove = energyInc < 0;
@@ -1022,11 +1036,13 @@ double SANA::scoreComparison(double newAligEdges, double newInducedEdges,
         newCurrentScore += wecWeight?wecWeight / (newWecSum / (2 * g1Edges)):0;
         newCurrentScore += jsWeight?jsWeight * (newJsSum):0;
         newCurrentScore += ncWeight?ncWeight / (newNcSum / trueAWithValidCountAppended.back()):0;
-        if(beta_value==inf){
-            newCurrentScore += f_betaWeight?f_betaWeight * (newAligEdges / newInducedEdges):0;
-        }else{
-            newCurrentScore += f_betaWeight?f_betaWeight * (((1 + (beta_value * beta_value)) * newAligEdges) / (g1Edges + (beta_value * beta_value * newInducedEdges))) : 0;
-        }
+	if(f_betaWeight) {
+	    if(beta_value==inf){
+		newCurrentScore += f_betaWeight * (newAligEdges / newInducedEdges);
+	    }else{
+		newCurrentScore += f_betaWeight * (((1 + (beta_value * beta_value)) * newAligEdges) / (g1Edges + (beta_value * beta_value * newInducedEdges)));
+	    }
+	}
         energyInc = newCurrentScore - currentScore;
         wasBadMove = energyInc < 0;
         break;
@@ -1034,9 +1050,7 @@ double SANA::scoreComparison(double newAligEdges, double newInducedEdges,
     case ScoreAggregation::maxFactor:
     {
         assert(icsWeight == 0.0);
-        if(beta_value==inf){
-            assert(f_betaWeight == 0.0);
-        }
+	if(f_betaWeight && beta_value==inf) throw runtime_error("SANA::scoreComparison: beta inconsistency");
         double maxScore = max(ncWeight*(newNcSum / trueAWithValidCountAppended.back() - ncSum / trueAWithValidCountAppended.back()), max(max(ecWeight*(newAligEdges / g1Edges - aligEdges / g1Edges), max(
             s3Weight*((newAligEdges / (g1Edges + newInducedEdges - newAligEdges) - (aligEdges / (g1Edges + inducedEdges - aligEdges)))),
             secWeight*0.5*(newAligEdges / g1Edges - aligEdges / g1Edges + newAligEdges / g2Edges - aligEdges / g2Edges))),
@@ -1057,11 +1071,13 @@ double SANA::scoreComparison(double newAligEdges, double newInducedEdges,
         newCurrentScore += wecWeight?wecWeight * (newWecSum / (2 * g1Edges)):0;
         newCurrentScore += jsWeight?jsWeight * (newJsSum):0;
         newCurrentScore += ncWeight?ncWeight * (newNcSum / trueAWithValidCountAppended.back()):0;
-        if(beta_value==inf){
-            newCurrentScore += f_betaWeight?f_betaWeight * (newAligEdges / newInducedEdges):0;
-        } else {
-	    newCurrentScore += f_betaWeight?f_betaWeight * (((1 + (beta_value * beta_value)) * newAligEdges) / (g1Edges + (beta_value * beta_value * newInducedEdges))) : 0;
-        }
+	if(f_betaWeight) {
+	    if(beta_value==inf){
+		newCurrentScore += f_betaWeight * (newAligEdges / newInducedEdges);
+	    } else {
+		newCurrentScore += f_betaWeight * (((1 + (beta_value * beta_value)) * newAligEdges) / (g1Edges + (beta_value * beta_value * newInducedEdges)));
+	    }
+	}
         energyInc = newCurrentScore - currentScore;
         wasBadMove = maxScore < -1 * minScore;
         break;
@@ -1269,7 +1285,6 @@ double SANA::edgeRatioIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
 
 double SANA::edgeMinIncChangeOp(uint peg, uint oldHole, uint newHole) {
     assert(A[peg] == oldHole);
-    _whichMove=0;
     int ai=0, aSize=4*G1->getNumNodes(); // edges in both directions from everyone (including SELF!)
     assert(aSize <= MAX_A_ARRAY);
     for (uint nbr : G1->adjLists[peg]) {
@@ -1288,7 +1303,7 @@ double SANA::edgeMinIncChangeOp(uint peg, uint oldHole, uint newHole) {
 	a[ai++] =  EdgeMin::getAligEdgeScore(G1,nbr,peg, G2,nbrHole,newHole);
 	assert(ai<=aSize);
     }
-    double noAvoid = G1->getNumNodes();
+    uint noAvoid = G1->getNumNodes();
     double before = EdgeMin::scoreOnePeg(G1,peg,noAvoid, G2, oldHole, A);
     double after  = EdgeMin::scoreOnePeg(G1,peg,noAvoid, G2, newHole, A);
     double old = AccurateSum(ai, a);
@@ -1301,56 +1316,67 @@ double SANA::edgeMinIncChangeOp(uint peg, uint oldHole, uint newHole) {
 double SANA::edgeMinIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
     assert (peg1 != peg2);
     assert(A[peg1] == hole1 && A[peg2] == hole2);
-    _whichMove=1;
     int ai=0, aSize=8*G1->getNumNodes(); // two pegs, each with edges in both directions from potentially everyone else
     assert(aSize <= MAX_A_ARRAY);
     // Subtract (peg1->hole1), add (peg1->hole2)
+    uint nbrHole;
     for (uint nbr : G1->adjLists[peg1]) {
 	if(nbr == peg1) assert(A[nbr] == hole1);
         a[ai++] = -EdgeMin::getAligEdgeScore(G1,peg1,nbr, G2,hole1,A[nbr]);
-        uint nbrHole; if(nbr == peg1) nbrHole=hole2; else if(nbr==peg2) nbrHole=hole1; else nbrHole=A[nbr];
+        if(nbr == peg1) nbrHole=hole2; else if(nbr==peg2) nbrHole=hole1; else nbrHole=A[nbr];
         a[ai++] =  EdgeMin::getAligEdgeScore(G1,peg1,nbr, G2,hole2,nbrHole);
 	assert(ai<=aSize);
     }
-    if(G1->directed) for (uint nbr : G1->injLists[peg1]) {
+    if(G1->directed) for (uint nbr : G1->injLists[peg1]) { // skip the self and peg2 outgoing
 	if(nbr == peg1) assert(A[nbr] == hole1);
-	a[ai++] = -EdgeMin::getAligEdgeScore(G1,nbr,peg1, G2,A[nbr],hole1);
-        uint nbrHole; if(nbr == peg1) nbrHole=hole2; else if(nbr==peg2) nbrHole=hole1; else nbrHole=A[nbr];
-        a[ai++] =  EdgeMin::getAligEdgeScore(G1,nbr,peg1, G2,nbrHole,hole2);
+        if(nbr != peg1 && nbr!=peg2) {
+	    a[ai++] = -EdgeMin::getAligEdgeScore(G1,nbr,peg1, G2,A[nbr],hole1);
+	    nbrHole=A[nbr];
+	    a[ai++] =  EdgeMin::getAligEdgeScore(G1,nbr,peg1, G2,nbrHole,hole2);
+	}
 	assert(ai<=aSize);
     }
    // Subtract peg2-hole2, add peg2-hole1
    for (uint nbr : G1->adjLists[peg2]) {
 	if(nbr == peg2) assert(A[nbr] == hole2);
         a[ai++] = -EdgeMin::getAligEdgeScore(G1,peg2,nbr, G2,hole2,A[nbr]);
-        uint nbrHole; if(nbr == peg2) nbrHole=hole1; else if(nbr==peg1) nbrHole=hole2; else nbrHole=A[nbr];
+        if(nbr == peg2) nbrHole=hole1; else if(nbr==peg1) nbrHole=hole2; else nbrHole=A[nbr];
         a[ai++] =  EdgeMin::getAligEdgeScore(G1,peg2,nbr, G2,hole1,nbrHole);
 	assert(ai<=aSize);
     }
     if(G1->directed) for (uint nbr : G1->injLists[peg2]) {
 	if(nbr == peg2) assert(A[nbr] == hole2);
-	a[ai++] = -EdgeMin::getAligEdgeScore(G1,nbr,peg2, G2,A[nbr],hole2);
-        uint nbrHole; if(nbr == peg2) nbrHole=hole1; else if(nbr==peg1) nbrHole=hole2; else nbrHole=A[nbr];
-        a[ai++] =  EdgeMin::getAligEdgeScore(G1,nbr,peg2, G2,nbrHole,hole1);
+        if(nbr != peg2 && nbr!=peg1) {
+	    a[ai++] = -EdgeMin::getAligEdgeScore(G1,nbr,peg2, G2,A[nbr],hole2);
+	    nbrHole=A[nbr];
+	    a[ai++] =  EdgeMin::getAligEdgeScore(G1,nbr,peg2, G2,nbrHole,hole1);
+	}
 	assert(ai<=aSize);
     }
-    double here =  AccurateSum(ai,a);
-    double other = edgeMinIncSwapOp2(peg1, peg2, hole1, hole2);
-    _predictedScore1 = currentScore + here;
-    _predictedScore2 = currentScore + other;
-    //if(fabs((other-here)) > 1e-8) printf("oldIncSwap = %g, new = %g, diff = %g \n", here, other, other-here);
-    return here;
+    double oldFast =  AccurateSum(ai,a);
+    return oldFast;
+#if DEBUG_EDGEMIN
+    double easySlow = edgeMinIncSwapOp2(peg1, peg2, hole1, hole2);
+    if(fabs(oldFast-easySlow)>4e-16) {printf("X");fflush(stdout);}
+    _predictedScore1 = currentScore + oldFast;
+    _predictedScore2 = currentScore + easySlow;
+    if(fabs((easySlow-oldFast)) > 1e-8) printf("oldIncSwap = %g, new = %g, diff = %g \n", oldFast, easySlow, easySlow-oldFast);
+    return easySlow;
+#endif
 }
 
 
 double SANA::edgeMinIncSwapOp2(uint peg1, uint peg2, uint hole1, uint hole2) {
     assert(A[peg1] == hole1 && A[peg2] == hole2);
-    if (peg1 == peg2) return 0;
+    assert (peg1 != peg2); // return 0;
     double noAvoid = G1->getNumNodes();
     double old = EdgeMin::scoreOnePeg(G1,peg1,noAvoid, G2, hole1, A); // score outward and inward A-aligned edges of peg1
     old       += EdgeMin::scoreOnePeg(G1,peg2,peg1,    G2, hole2, A); // score out&in as above for peg2 EXCEPT if going to peg1
+    // Note we must PHYSICALLY swap peg1+peg2 in A, in order to correctly score the new position
+    A[peg1] = hole2; A[peg2] = hole1;
     double New = EdgeMin::scoreOnePeg(G1,peg2,noAvoid, G2, hole1, A); // score outward and inward aligned edges of peg1
     New       += EdgeMin::scoreOnePeg(G1,peg1,peg2,    G2, hole2, A); // score out&in as above for peg2 EXCEPT if going to peg1
+    A[peg1] = hole1; A[peg2] = hole2;
     return New-old;
 }
 
