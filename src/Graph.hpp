@@ -38,10 +38,8 @@ using namespace std;
 	    #define EDGE_T unsigned char //change to unsigned short for >256 networks
 	#endif
     #else
-	#ifdef WEIGHT
-	    #define EDGE_T float // unsigned char // I've clipped FlyWire edge weights at 255
-	#else
-	    #define EDGE_T bool //unweighted graphs -- the normal/traditional setting
+	#if defined(WEIGHT) && !defined(EDGE_T)
+	    #error "WEIGHT requires EDGE_T to be defined"
 	#endif
     #endif
 #endif

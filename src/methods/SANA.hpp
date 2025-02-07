@@ -164,9 +164,6 @@ private:
     double edgeDifferenceIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2);
     double edgeRatioIncChangeOp(uint peg, uint oldHole, uint newHole);
     double edgeRatioIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2);
-    double edgeMinIncChangeOp(uint peg, uint oldHole, uint newHole);
-    double edgeMinIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2);
-    double edgeMinIncSwapOp2(uint peg1, uint peg2, uint hole1, uint hole2);
 
     // to evaluate SES incrementally
     bool needSquaredAligEdges;
