@@ -44,7 +44,6 @@
 
 using namespace std;
 
-#define DEBUG_EDGEMIN 0
 #if DEBUG_EDGEMIN
 static double _predictedScore1, _predictedScore2;
 #endif
@@ -197,7 +196,7 @@ SANA::SANA(const Graph* G1, const Graph* G2,
         uint c1 = G1->numNodesWithColor(g1Id);
         uint c2 = G2->numNodesWithColor(G2->getColorId(colName));
         if (c1 > c2) throw runtime_error("there are "+to_string(c1)+" G1 nodes colored "
-                    +colName+" but only "+to_string(c2)+" such nodes in G2");  
+                    +colName+" but only "+to_string(c2)+" such nodes in G2");
         uint numSwapNbrs = c1*(c1-1)/2, numChangeNbrs = c1*(c2-c1);
         numSwapNeighborsByG1Color[g1Id] = numSwapNbrs;
         numChangeNeighborsByG1Color[g1Id] = numChangeNbrs;
@@ -235,7 +234,7 @@ SANA::SANA(const Graph* G1, const Graph* G2,
         for (uint i = 0; i < actColToG1ColId.size(); i++) {
             string name = G1->getColorName(actColToG1ColId[i]);
             double colP = actColToAccumProbCutpoint[i] - (i>0 ? actColToAccumProbCutpoint[i-1] : 0);
-            colTable.push_back({to_string(i), name, to_string(colP), to_string(actColToAccumProbCutpoint[i]), 
+            colTable.push_back({to_string(i), name, to_string(colP), to_string(actColToAccumProbCutpoint[i]),
                                 to_string(actColToChangeProb[i]), to_string(1-actColToChangeProb[i])});
         }
         printTable(colTable, 4, cerr);
@@ -295,10 +294,10 @@ void SANA::initDataStructures() {
     if (needAligEdges or needSec) aligEdges = alig.computeNumAlignedEdges(*G1, *G2);
     if (needEd) edSum = EdgeDifference::getEdgeDifferenceSum(G1, G2, alig);
     if (needEr) erSum = EdgeRatio::getEdgeRatioSum(G1, G2, alig);
-    if (needEmin) eminSum = EdgeMin::getEdgeMinSum(G1, G2, alig);
+    if (needEmin) eminSum = ((EdgeMin*) MC->getMeasure("emin"))->eval(alig);
     if (needSquaredAligEdges) squaredAligEdges =
             ((SquaredEdgeScore*) MC->getMeasure("ses"))->numSquaredAlignedEdges(alig);
-    if (needExposedEdges) EdgeExposure::numer = 
+    if (needExposedEdges) EdgeExposure::numer =
         EdgeExposure::numExposedEdges(alig, *G1, *G2);//- EdgeExposure::getMaxEdge();
     if (needMS3) {
         MultiS3::numer = ((MultiS3*) MC->getMeasure("ms3"))->computeNumer(alig);
@@ -342,7 +341,7 @@ void SANA::initDataStructures() {
     }
     if (needNC) {
         Measure* nc = MC->getMeasure("nc");
-        ncSum       = (nc->eval(alig))*trueAWithValidCountAppended.back(); 
+        ncSum       = (nc->eval(alig))*trueAWithValidCountAppended.back();
     }
     currentScore = eval(alig);
     A = alig.asVector();
@@ -547,7 +546,7 @@ Alignment SANA::runUsingConfidenceIntervals() {
 void SANA::performHillClimbing(long long int idleCountTarget) {
     long long int iter = 0;
     Temperature = 0;
-    numPBadsInBuffer = pBadBufferSum = pBadBufferIndex = 0; 
+    numPBadsInBuffer = pBadBufferSum = pBadBufferIndex = 0;
 
     cout << "Beginning Final Pure Hill Climbing Stage" << endl;
     Timer T;
@@ -623,7 +622,7 @@ void sigIntHandler(int s) {
         else if (c == 1) exit(0);
         else if (c == 2) SANA::saveAligAndExitOnInterruption = true;
         else if (c == 3) SANA::saveAligAndContOnInterruption = true;
-    } while (c < 0 || c > 3);    
+    } while (c < 0 || c > 3);
 }
 void SANA::setInterruptSignal() {
     saveAligAndExitOnInterruption = false;
@@ -654,6 +653,7 @@ void SANA::SANAIteration() {
     if (p < actColToChangeProb[actColId]) performChange(actColId);
     else performSwap(actColId);
     assert(!std::isnan(currentScore));
+    assert(currentScore == currentScore);
     if(std::isinf(currentScore)) {
 	throw runtime_error("currentScore is inf; this might happen if there are self-loops (not otherwise detected)");
     }
@@ -710,7 +710,7 @@ uint SANA::randomG1NodeWithActiveColor(uint actColId, bool dynamic) const {
     }
     uint randIndex = randInt(0, G1->nodeGroupsByColor[g1ColId].size()-1);
     return G1->nodeGroupsByColor[g1ColId][randIndex];
-} 
+}
 
 void SANA::performChange(uint actColId) {
     uint peg = randomG1NodeWithActiveColor(actColId, true);
@@ -736,7 +736,7 @@ void SANA::performChange(uint actColId) {
     int newAligEdges           = (needAligEdges or needSec) ? aligEdges + aligEdgesIncChangeOp(peg, oldHole, newHole) : -1;
     double newEdSum            = needEd ? edSum + edgeDifferenceIncChangeOp(peg, oldHole, newHole) : -1;
     double newErSum            = needEr ? erSum + edgeRatioIncChangeOp(peg, oldHole, newHole) : -1;
-    double newEminSum          = needEmin ? eminSum + edgeMinIncChangeOp(peg, oldHole, newHole) : -1;
+    double newEminSum          = needEmin ? eminSum + EdgeMin::getIncChangeOp(peg, oldHole, newHole, A) : -1;
     double newSquaredAligEdges = needSquaredAligEdges ? squaredAligEdges + squaredAligEdgesIncChangeOp(peg, oldHole, newHole) : -1;
     double newExposedEdgesNumer= needExposedEdges ? EdgeExposure::numer + exposedEdgesIncChangeOp(peg, oldHole, newHole) : -1;
     double newMS3Numer         = needMS3 ? MultiS3::numer + MS3IncChangeOp(peg, oldHole, newHole) : -1;
@@ -848,7 +848,7 @@ void SANA::performSwap(uint actColId) {
     double newLocalScoreSum    = needLocal ? localScoreSum + localScoreSumIncSwapOp(sims, peg1, peg2, hole1, hole2) : -1;
     double newEdSum            = needEd ? edSum + edgeDifferenceIncSwapOp(peg1, peg2, hole1, hole2) : -1;
     double newErSum            = needEr ? erSum + edgeRatioIncSwapOp(peg1, peg2, hole1, hole2) : -1;
-    double newEminSum          = needEmin ? eminSum + edgeMinIncSwapOp(peg1, peg2, hole1, hole2) : -1;
+    double newEminSum          = needEmin ? eminSum + EdgeMin::getIncSwapOp(peg1, peg2, hole1, hole2, A) : -1;
 
     map<string, double> newLocalScoreSumMap;
     if (needLocal) {
@@ -936,7 +936,7 @@ double SANA::scoreComparison(double newAligEdges, double newInducedEdges,
 		newCurrentScore += f_betaWeight * (((1 + (beta_value * beta_value)) * newAligEdges) / (g1Edges + (beta_value * beta_value * newInducedEdges)));
 	    }
 	}
-        
+
 #if defined(MULTI_PAIRWISE) || defined(MULTI_MPI)
         newCurrentScore += mecWeight?mecWeight * (newAligEdges / (g1TotalWeight + g2TotalWeight)):0;
         newCurrentScore += sesWeight?sesWeight * newSquaredAligEdges / (double)SquaredEdgeScore::getDenom():0;
@@ -994,7 +994,7 @@ double SANA::scoreComparison(double newAligEdges, double newInducedEdges,
 		newCurrentScore += f_betaWeight * (((1 + (beta_value * beta_value)) * newAligEdges) / (g1Edges + (beta_value * beta_value * newInducedEdges)));
 	    }
 	}
-        
+
         energyInc = newCurrentScore - currentScore;
         wasBadMove = energyInc < 0;
         break;
@@ -1093,7 +1093,7 @@ double SANA::scoreComparison(double newAligEdges, double newInducedEdges,
     if (energyInc >= 0) pBad = 1.0;
     else pBad = max(0.0, min(1.0, exp(energyInc / Temperature)));
 
-    //if (wasBadMove && (iterationsPerformed % 512 == 0 || (iterationsPerformed % 32 == 0))) 
+    //if (wasBadMove && (iterationsPerformed % 512 == 0 || (iterationsPerformed % 32 == 0)))
     //the above will never be true in the case of iterationsPerformed never being changed so that it doesn't greatly
     // slow down the program if for some reason iterationsPerformed doesn't need to be changed.
     if (wasBadMove) { // I think Dillon was wrong above, just do it always - WH
@@ -1283,104 +1283,6 @@ double SANA::edgeRatioIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
 }
 
 
-double SANA::edgeMinIncChangeOp(uint peg, uint oldHole, uint newHole) {
-    assert(A[peg] == oldHole);
-    int ai=0, aSize=4*G1->getNumNodes(); // edges in both directions from everyone (including SELF!)
-    assert(aSize <= MAX_A_ARRAY);
-    for (uint nbr : G1->adjLists[peg]) {
-	if(nbr == peg) assert(A[nbr] == oldHole);
-        a[ai++] = -EdgeMin::getAligEdgeScore(G1,peg,nbr, G2,oldHole,A[nbr]);
-	// if the PEG has a self-loop, then moving it to newHole means we need to check for underlying self-loop at newHole;
-	// otherwise the underlying edge is between newHole and the (non-self) neighbor's aligned hole.
-        uint nbrHole = (nbr == peg) ? newHole : A[nbr];
-        a[ai++] =  EdgeMin::getAligEdgeScore(G1,peg,nbr, G2,newHole,nbrHole);
-	assert(ai<=aSize);
-    }
-    if(G1->directed) for (uint nbr : G1->injLists[peg]) {
-	if(nbr == peg) assert(A[nbr] == oldHole);
-	a[ai++] = -EdgeMin::getAligEdgeScore(G1,nbr,peg, G2,A[nbr],oldHole);
-        uint nbrHole = (nbr == peg) ? newHole : A[nbr];
-	a[ai++] =  EdgeMin::getAligEdgeScore(G1,nbr,peg, G2,nbrHole,newHole);
-	assert(ai<=aSize);
-    }
-    uint noAvoid = G1->getNumNodes();
-    double before = EdgeMin::scoreOnePeg(G1,peg,noAvoid, G2, oldHole, A);
-    double after  = EdgeMin::scoreOnePeg(G1,peg,noAvoid, G2, newHole, A);
-    double old = AccurateSum(ai, a);
-    if(fabs(after-before-old)<1e-19) return old;
-    printf("old %g Marcus %g diff %g\n", old, after-before, after-before-old);
-    assert(false);
-    return 0;
-}
-
-double SANA::edgeMinIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
-    assert (peg1 != peg2);
-    assert(A[peg1] == hole1 && A[peg2] == hole2);
-    int ai=0, aSize=8*G1->getNumNodes(); // two pegs, each with edges in both directions from potentially everyone else
-    assert(aSize <= MAX_A_ARRAY);
-    // Subtract (peg1->hole1), add (peg1->hole2)
-    uint nbrHole;
-    for (uint nbr : G1->adjLists[peg1]) {
-	if(nbr == peg1) assert(A[nbr] == hole1);
-        a[ai++] = -EdgeMin::getAligEdgeScore(G1,peg1,nbr, G2,hole1,A[nbr]);
-        if(nbr == peg1) nbrHole=hole2; else if(nbr==peg2) nbrHole=hole1; else nbrHole=A[nbr];
-        a[ai++] =  EdgeMin::getAligEdgeScore(G1,peg1,nbr, G2,hole2,nbrHole);
-	assert(ai<=aSize);
-    }
-    if(G1->directed) for (uint nbr : G1->injLists[peg1]) { // skip the self and peg2 outgoing
-	if(nbr == peg1) assert(A[nbr] == hole1);
-        if(nbr != peg1 && nbr!=peg2) {
-	    a[ai++] = -EdgeMin::getAligEdgeScore(G1,nbr,peg1, G2,A[nbr],hole1);
-	    nbrHole=A[nbr];
-	    a[ai++] =  EdgeMin::getAligEdgeScore(G1,nbr,peg1, G2,nbrHole,hole2);
-	}
-	assert(ai<=aSize);
-    }
-   // Subtract peg2-hole2, add peg2-hole1
-   for (uint nbr : G1->adjLists[peg2]) {
-	if(nbr == peg2) assert(A[nbr] == hole2);
-        a[ai++] = -EdgeMin::getAligEdgeScore(G1,peg2,nbr, G2,hole2,A[nbr]);
-        if(nbr == peg2) nbrHole=hole1; else if(nbr==peg1) nbrHole=hole2; else nbrHole=A[nbr];
-        a[ai++] =  EdgeMin::getAligEdgeScore(G1,peg2,nbr, G2,hole1,nbrHole);
-	assert(ai<=aSize);
-    }
-    if(G1->directed) for (uint nbr : G1->injLists[peg2]) {
-	if(nbr == peg2) assert(A[nbr] == hole2);
-        if(nbr != peg2 && nbr!=peg1) {
-	    a[ai++] = -EdgeMin::getAligEdgeScore(G1,nbr,peg2, G2,A[nbr],hole2);
-	    nbrHole=A[nbr];
-	    a[ai++] =  EdgeMin::getAligEdgeScore(G1,nbr,peg2, G2,nbrHole,hole1);
-	}
-	assert(ai<=aSize);
-    }
-    double oldFast =  AccurateSum(ai,a);
-    return oldFast;
-#if DEBUG_EDGEMIN
-    double easySlow = edgeMinIncSwapOp2(peg1, peg2, hole1, hole2);
-    if(fabs(oldFast-easySlow)>4e-16) {printf("X");fflush(stdout);}
-    _predictedScore1 = currentScore + oldFast;
-    _predictedScore2 = currentScore + easySlow;
-    if(fabs((easySlow-oldFast)) > 1e-8) printf("oldIncSwap = %g, new = %g, diff = %g \n", oldFast, easySlow, easySlow-oldFast);
-    return easySlow;
-#endif
-}
-
-
-double SANA::edgeMinIncSwapOp2(uint peg1, uint peg2, uint hole1, uint hole2) {
-    assert(A[peg1] == hole1 && A[peg2] == hole2);
-    assert (peg1 != peg2); // return 0;
-    double noAvoid = G1->getNumNodes();
-    double old = EdgeMin::scoreOnePeg(G1,peg1,noAvoid, G2, hole1, A); // score outward and inward A-aligned edges of peg1
-    old       += EdgeMin::scoreOnePeg(G1,peg2,peg1,    G2, hole2, A); // score out&in as above for peg2 EXCEPT if going to peg1
-    // Note we must PHYSICALLY swap peg1+peg2 in A, in order to correctly score the new position
-    A[peg1] = hole2; A[peg2] = hole1;
-    double New = EdgeMin::scoreOnePeg(G1,peg2,noAvoid, G2, hole1, A); // score outward and inward aligned edges of peg1
-    New       += EdgeMin::scoreOnePeg(G1,peg1,peg2,    G2, hole2, A); // score out&in as above for peg2 EXCEPT if going to peg1
-    A[peg1] = hole1; A[peg2] = hole2;
-    return New-old;
-}
-
-
 double SANA::edgeDifferenceIncChangeOp(uint peg, uint oldHole, uint newHole) {
     double edgeDifferenceIncDiff = 0;
     double c = 0;
@@ -1511,7 +1413,7 @@ int SANA::MS3IncChangeOp(uint peg, uint oldHole, uint newHole) {
             }
         }
 	break;
-    
+
         case MultiS3::ra_global:
         {
             const uint n = G1->adjLists[peg].size();
@@ -1531,7 +1433,7 @@ int SANA::MS3IncChangeOp(uint peg, uint oldHole, uint newHole) {
             }
         }
 	break;
-        
+
         case MultiS3::la_k:
         {
             const uint n = G1->adjLists[peg].size();
@@ -1549,7 +1451,7 @@ int SANA::MS3IncChangeOp(uint peg, uint oldHole, uint newHole) {
             }
         }
 	break;
-            
+
         case MultiS3::la_global:
         {
             bool ladder = false;
@@ -1630,7 +1532,7 @@ int SANA::MS3IncChangeOp(uint peg, uint oldHole, uint newHole) {
 	    }
 	}
 	break;
-            
+
         case MultiS3::ee_k:
         {
             uint numNeigh = G2->adjLists[oldHole].size();
@@ -1677,7 +1579,7 @@ int SANA::MS3IncChangeOp(uint peg, uint oldHole, uint newHole) {
             MultiS3::denom += newEdgeWeights;
         }
     break;
-            
+
         default:
 	{
 #if 0
@@ -1707,7 +1609,7 @@ int SANA::MS3IncChangeOp(uint peg, uint oldHole, uint newHole) {
                 if (whichPeg[holeNeigh]<n1 and peg!=whichPeg[holeNeigh] ){
                     MultiS3::denom++;
                 }
-            }  	    
+            }
 #endif
 	}
 	break;
@@ -1744,7 +1646,7 @@ int SANA::MS3IncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
               return res;
           }
               break;
-              
+
           case MultiS3::ra_global:
           {
               const uint n = G1->adjLists[peg1].size();
@@ -1772,7 +1674,7 @@ int SANA::MS3IncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
                   if (G2->getEdgeWeight(hole2,hole1)==1){res++;}
                   else if (G2->getEdgeWeight(hole2,hole1)==0){res--;}
               }
-              
+
               const uint m = G1->adjLists[peg2].size();
               for (i = 0; i < m; ++i) {
                   pegNeigh = G1->adjLists[peg2][i];
@@ -1784,7 +1686,7 @@ int SANA::MS3IncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
                           res--;
                           if (G2->getEdgeWeight(hole2,A[pegNeigh]) == 1){res--;}
                           }
-                      
+
                       diff = G2->getEdgeWeight(hole1,A[pegNeigh]) + 1;
                       if (hole1!=A[pegNeigh]){
                           if (diff==2){res+=2;}
@@ -1847,7 +1749,7 @@ int SANA::MS3IncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
               const uint n = G1->adjLists[peg1].size();
               uint i = 0;
               bool ladder = false;
-              
+
               for (; i < n; ++i) {
                   pegNeigh = G1->adjLists[peg1][i];
                   if (G1->getEdgeWeight(pegNeigh,peg1)>0){
@@ -1859,7 +1761,7 @@ int SANA::MS3IncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
                   }
               }
               if (G2->getEdgeWeight(hole2,A[peg1])==1 and G1->getEdgeWeight(peg1,peg2)==1){res++;}
-              
+
               const uint m = G1->adjLists[peg2].size();
               for (i = 0; i < m; ++i) {
                   pegNeigh = G1->adjLists[peg2][i];
@@ -1999,7 +1901,7 @@ int SANA::MS3IncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
                       MultiS3::denom--;
                   }
               }
-              
+
               numNeigh = G1->adjLists[peg2].size();
               for (uint i =0; i < numNeigh; i++){
                   pegNeigh = G1->adjLists[peg2][i];
@@ -2029,7 +1931,7 @@ int SANA::MS3IncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
         {
 #if 0
 		if (oldhole1Deg > 0 && !MultiS3::shadowDegree[hole1]) MultiS3::denom -= 1;
-        	if (oldhole2Deg > 0 && !MultiS3::shadowDegree[hole2]) MultiS3::denom += 1;	
+        	if (oldhole2Deg > 0 && !MultiS3::shadowDegree[hole2]) MultiS3::denom += 1;
 #else
               uint numNeigh = G2->adjLists[hole1].size();
               for (uint i =0; i < numNeigh; i++){
@@ -2065,7 +1967,7 @@ int SANA::MS3IncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
                       MultiS3::denom--;
                   }
               }
-              
+
               numNeigh = G1->adjLists[peg2].size();
               for (uint i =0; i < numNeigh; i++){
                   pegNeigh = G1->adjLists[peg2][i];
@@ -2120,7 +2022,7 @@ double SANA::JSIncChangeOp(uint peg, uint oldHole, uint newHole) {
     uint pegAlignedEdges = 0;
     vector<uint> pegNeighbors = G1->adjLists[peg];
     for (uint nbr : pegNeighbors) {
-        uint neighborAlignedTo = A[nbr]; 
+        uint neighborAlignedTo = A[nbr];
         pegAlignedEdges += G2->getEdgeWeight(newHole, neighborAlignedTo);
     }
     alignedByNode[peg] = pegAlignedEdges;
@@ -2269,10 +2171,10 @@ double SANA::EWECIncChangeOp(uint peg, uint oldHole, uint newHole) {
 }
 
 double SANA::EWECIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
-    double score = EWECSimCombo(peg1, hole2) + EWECSimCombo(peg2, hole1) 
+    double score = EWECSimCombo(peg1, hole2) + EWECSimCombo(peg2, hole1)
                  - EWECSimCombo(peg1, hole1) - EWECSimCombo(peg2, hole2);
     if (G1->hasEdge(peg1, peg2) and G2->hasEdge(hole1, hole2)) {
-        score += ewec->getScore(ewec->getColIndex(hole1, hole2), 
+        score += ewec->getScore(ewec->getColIndex(hole1, hole2),
                                 ewec->getRowIndex(peg1, peg2))/(g1Edges); //correcting for missed edges when swapping 2 adjacent pairs
     }
     return score;
@@ -2339,7 +2241,7 @@ void SANA::trackProgress(long long int iter, double fractionTime, int batches, d
     }
 
     //code for estimating dynamic TDecay. The dynamic method uses linear interpolation to obtain an
-    //an "ideal" P(bad) as a basis for SANA runs. If the current P(bad) is significantly different from 
+    //an "ideal" P(bad) as a basis for SANA runs. If the current P(bad) is significantly different from
     //our "ideal" P(bad), then decay is either "sped up" or "slowed down"
     if (dynamicTDecay) {
         int NSteps = 100;
@@ -2385,7 +2287,7 @@ void SANA::initIterPerSecond() {
     double totalIps = 0.0;
     int ipsListSize = 0;
     if (ipsList.size() != 0) {
-	cout << "ipsList\n"; 
+	cout << "ipsList\n";
         for (pair<double,double> ipsPair : ipsList) {
             if (TFinal <= ipsPair.first && ipsPair.first <= TInitial) {
                 totalIps+=ipsPair.second;
@@ -2432,6 +2334,7 @@ once we know we are at equilibrium, we use the buffer of pbads to get an average
 'logLevel' can be 0 (no output) 1 (logs result in cerr) or 2 (verbose/debug mode)*/
 double SANA::getEquilibriumPBadAtTemp(double temp, double maxTimeInS, int logLevel) {
     //new state for the run at fixed temperature
+    //assert(temp == temp);
     constantTemp = true;
     Temperature = temp;
     enableTrackProgress = false;
@@ -2459,7 +2362,7 @@ double SANA::getEquilibriumPBadAtTemp(double temp, double maxTimeInS, int logLev
             }
             //circular buffer behavior
             //(since the buffer is tiny, the cost of shifting everything is negligible)
-            scoreBuffer.push_back(currentScore);            
+            scoreBuffer.push_back(currentScore);
             if (scoreBuffer.size() > numScores) scoreBuffer.erase(scoreBuffer.begin());
             if (scoreBuffer.size() == numScores) {
                 //check if we are at eq:

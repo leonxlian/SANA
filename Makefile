@@ -51,7 +51,7 @@ endif
 ifeq ($(WEIGHT), 1)
     CXXFLAGS := $(CXXFLAGS) -DWEIGHT
     ifndef EDGE_T
-	EDGE_T=float
+	EDGE_T=float # default; use uchar or ushort to reduce memory usage (if weights are ints)
     endif
     SUFFIX=.$(EDGE_T)
     CXXFLAGS := $(CXXFLAGS) "-DEDGE_T=$(EDGE_T)"

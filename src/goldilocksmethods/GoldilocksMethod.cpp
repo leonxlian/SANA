@@ -82,12 +82,14 @@ double GoldilocksMethod::computeTempForPBad(double targetPBad, GoldilocksMethod:
 }
 
 double GoldilocksMethod::sGetPBad(double temp, double sampleTime) {
+    assert(temp==temp);
     double res = sana->getEquilibriumPBadAtTemp(temp, sampleTime);
     allTempToPBad.insert({temp, res});
     return res;
 }
 
 double GoldilocksMethod::getPBad(double temp) {
+    assert(temp==temp);
     double res = sGetPBad(temp, sampleTime);
     tempToPBad.insert({temp, res});
     return res;
@@ -150,6 +152,7 @@ double GoldilocksMethod::doublingMethod(double targetPBad, bool nextAbove, doubl
     bool initStartPBad = false;
     for (auto tempPBadPair = tempToPBad.begin(); tempPBadPair != tempToPBad.end(); tempPBadPair++) {
         double temp = tempPBadPair->first;
+	assert(temp==temp);
         double pBad = tempPBadPair->second;
         double pBadDiff = abs(pBad-targetPBad);
         if (pBadDiff < smallestPBadDiff) {
@@ -170,6 +173,7 @@ double GoldilocksMethod::doublingMethod(double targetPBad, bool nextAbove, doubl
     startTemp = pow(base, startTempLog);
 
     double temp = startTemp;
+    assert(temp==temp);
     double priorTemp = temp;
     double pBad;
     if (initStartPBad) {
@@ -182,6 +186,7 @@ double GoldilocksMethod::doublingMethod(double targetPBad, bool nextAbove, doubl
         while (pBad < targetPBad) {
             priorTemp = temp;
             temp *= base;
+	    assert(temp==temp);
             pBad = getPBad(temp);
         }
         if (nextAbove) return temp;
@@ -190,6 +195,7 @@ double GoldilocksMethod::doublingMethod(double targetPBad, bool nextAbove, doubl
         while (pBad > targetPBad) {
             priorTemp = temp;
             temp /= base;
+	    assert(temp==temp);
             pBad = getPBad(temp);
         }
         if (nextAbove) return priorTemp;
@@ -219,13 +225,16 @@ double GoldilocksMethod::pBadBinarySearch(double targetPBad, GoldilocksMethod::R
     while (not areGoodBounds && highTemp < 1e30 && lowTemp > 1e-30) {
         highTemp *= 10;
         lowTemp /= 10;
+	assert(highTemp==highTemp);
         highPBad = getPBad(highTemp);
+	assert(lowTemp==lowTemp);
         lowPBad = getPBad(lowTemp);
         areGoodBounds = lowTemp < highTemp and isBelowTargetRange(lowPBad, targetPBad, errorTol)
                                            and isAboveTargetRange(highPBad, targetPBad, errorTol);
     }
 
     double midTemp = logScale ? exp((log(highTemp)+log(lowTemp))/2.0) : (highTemp+lowTemp)/2.0;
+    assert(midTemp==midTemp);
     double midPBad = getPBad(midTemp);
 
     if (isWithinTargetRange(highPBad, targetPBad, errorTol)) return highTemp;
