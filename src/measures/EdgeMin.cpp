@@ -19,9 +19,12 @@ EdgeMin::EdgeMin(const Graph* G1, const Graph* G2): Measure(G1, G2, "emin") {
 EdgeMin::~EdgeMin() {}
 
 double EdgeMin::computeDenom(const Graph* G1, const Graph* G2) {
-    double val = min(G1->getTotalEdgeWeight(), G2->getTotalEdgeWeight());
-    assert(val != 0.0);
-    return val;
+    // getTotalEdgeWeight doesn't work because if the edges are signed the result is close to zero.
+    // double val = min(G1->getTotalEdgeWeight(), G2->getTotalEdgeWeight());
+    double sumG1=0, sumG2=0;
+    for (const auto& edge : *(G1->getEdgeList())) sumG1 += fabs(G1->getEdgeWeight(edge[0], edge[1]));
+    for (const auto& edge : *(G2->getEdgeList())) sumG2 += fabs(G2->getEdgeWeight(edge[0], edge[1]));
+    return min(sumG1,sumG2);
 }
 
 double EdgeMin::eval(const Alignment& A) {
@@ -42,7 +45,7 @@ double EdgeMin::computeAligEdgeScore(const uint peg1, const uint peg2, const uin
     assert(0 <= hole1 && hole1 < G2->getNumNodes());
     assert(0 <= hole2 && hole2 < G2->getNumNodes());
     assert(EdgeMin::denominator != 0);
-    const int smaller = min(G1->getEdgeWeight(peg1, peg2), G2->getEdgeWeight(hole1, hole2));
+    const double smaller = min(G1->getEdgeWeight(peg1, peg2), G2->getEdgeWeight(hole1, hole2));
     assert(smaller == smaller);
     return smaller / EdgeMin::denominator;
 }
@@ -70,6 +73,10 @@ double EdgeMin::scoreOnePegSlow(const Graph* G1, const uint peg, const uint avoi
 	    a[ai++] = computeAligEdgeScore(nbr,peg, A[nbr],hole);
     assert(ai<=aSize);
     return AccurateSum(ai, a);
+}
+
+double EdgeMin::getSum(const Alignment &A) {
+    return computeSum(A);
 }
 
 double EdgeMin::computeSum(const Alignment &A) {
