@@ -44,6 +44,7 @@
 
 using namespace std;
 
+#define DEBUG_EDGEMIN 0
 #if DEBUG_EDGEMIN
 static double _predictedScore1, _predictedScore2;
 #endif
