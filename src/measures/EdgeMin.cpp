@@ -21,9 +21,17 @@ EdgeMin::~EdgeMin() {}
 double EdgeMin::computeDenom(const Graph* G1, const Graph* G2) {
     // getTotalEdgeWeight doesn't work because if the edges are signed the result is close to zero.
     // double val = min(G1->getTotalEdgeWeight(), G2->getTotalEdgeWeight());
-    double sumG1=0, sumG2=0;
-    for (const auto& edge : *(G1->getEdgeList())) sumG1 += fabs(G1->getEdgeWeight(edge[0], edge[1]));
-    for (const auto& edge : *(G2->getEdgeList())) sumG2 += fabs(G2->getEdgeWeight(edge[0], edge[1]));
+    double ew, sumG1=0, sumG2=0;
+    for (const auto& edge : *(G1->getEdgeList())) {
+	ew = G1->getEdgeWeight(edge[0], edge[1]);
+	if(ew < 0) throw runtime_error("EdgeMin really doesn't make sense with negative edges");
+	sumG1 += ew;
+    }
+    for (const auto& edge : *(G2->getEdgeList())) {
+	ew = G2->getEdgeWeight(edge[0], edge[1]);
+	if(ew < 0) throw runtime_error("EdgeMin really doesn't make sense with negative edges");
+	sumG2 += ew;
+    }
     return min(sumG1,sumG2);
 }
 

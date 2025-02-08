@@ -29,20 +29,22 @@ typedef unsigned long ulong;
 
 using namespace std;
 
-  //EDGE_T: macro specifying the type of the edge weights
-#if !defined(EDGE_T)
+//EDGE_T: macro specifying the type of the edge weights
+#if defined(EDGE_T)
+    // do nothing, assume user knows what they're doing
+#else // EDGE_T is not currently defined
     #if defined(MULTI_PAIRWISE) || defined(MULTI_MPI)
 	#ifdef WEIGHT
 	    #error currently, MULTI_* is not designed for float edges
 	#else
-	    #define EDGE_T unsigned char //change to unsigned short for >256 networks
+	    #define EDGE_T unsigned char // number of "rungs" in Shadow Network; change to unsigned short for >256 networks
 	#endif
-    #else
-	#define EDGE_T float //change to unsigned short for >256 networks
-    #endif
-#else
-    #if defined(WEIGHT) && !defined(EDGE_T)
-	#error "WEIGHT requires EDGE_T to be defined"
+    #else // EDGE_T not defined, and not MULTI
+	#ifdef WEIGHT
+	    #error "WEIGHT requires EDGE_T to be defined; use float unless your edges are integer weight"
+	#else
+	    #define EDGE_T bool
+	#endif
     #endif
 #endif
 
