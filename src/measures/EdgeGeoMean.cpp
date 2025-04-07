@@ -5,12 +5,14 @@ const Graph *EdgeGeoMean::G1, *EdgeGeoMean::G2;
 double EdgeGeoMean::denominator;
 
 EdgeGeoMean::EdgeGeoMean(const Graph* G1, const Graph* G2): Measure(G1, G2, "egm") {
+    assert(denominator == 0);
+    assert(EdgeGeoMean::G1 == NULL);
+    assert(EdgeGeoMean::G2 == NULL);
     EdgeGeoMean::G1=G1;
     EdgeGeoMean::G2=G2;
     EdgeGeoMean::denominator = computeDenom(G1,G2);
     std::cerr << "Computed denominator: " << EdgeGeoMean::denominator << std::endl;
 }
-
 
 EdgeGeoMean::~EdgeGeoMean() {
 }
@@ -20,13 +22,14 @@ double EdgeGeoMean::eval(const Alignment& A) {
 }
 
 double EdgeGeoMean::getEdgeScore(double w1, double w2) {
+    assert(w1 > 0 && w2 > 0); // for FlyWire, edges are positive
     double sgn = w1*w2>=0 ? 1:-1;
     double numer = sgn * sqrt(abs(w1*w2));
     if(denominator) return numer/denominator;
     else return numer;
 }
 
-static bool CmpEdge(EDGE_T w1, EDGE_T w2) {return (w1>w2);}
+static bool CmpEdge(EDGE_T w1, EDGE_T w2) { return (w1 > w2); }
 
 double EdgeGeoMean::computeDenom(const Graph* G1, const Graph* G2) {
     vector<EDGE_T> W1, W2;
@@ -35,7 +38,8 @@ double EdgeGeoMean::computeDenom(const Graph* G1, const Graph* G2) {
     sort(W1.begin(), W1.end(), CmpEdge);
     sort(W2.begin(), W2.end(), CmpEdge);
     double sum = 0.0;
-    for(unsigned i=0; i<min(W1.size(), W2.size()); i++) sum += getEdgeScore(W1[i], W2[i]);
+    unsigned minSize = min(W1.size(), W2.size());
+    for(unsigned i=0; i<minSize; i++) sum += getEdgeScore(W1[i], W2[i]);
     return sum;
 }
 

@@ -27,4 +27,4 @@ private:
     double computeDenom(const Graph* G1, const Graph* G2);
 };
 
-#endif //EDGEDIFFERENCE_HPP
+#endif //EDGEMIN_HPP
