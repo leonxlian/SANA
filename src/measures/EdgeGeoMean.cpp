@@ -21,7 +21,7 @@ double EdgeGeoMean::eval(const Alignment& A) {
     return getEdgeGeoMeanSum(G1, G2, A);
 }
 
-double EdgeGeoMean::getEdgeScore(double w1, double w2) {
+double EdgeGeoMean::getEdgeScore(EDGE_T w1, EDGE_T w2) {
     assert(w1 > 0 && w2 > 0); // for FlyWire, edges are positive
     double sgn = w1*w2>=0 ? 1:-1;
     double numer = sgn * sqrt(abs(w1*w2));
@@ -47,7 +47,8 @@ double EdgeGeoMean::getEdgeGeoMeanSum(const Graph* G1, const Graph* G2, const Al
     double sum = 0;
     for (const auto& edge : *(G1->getEdgeList())) {
        uint node1 = edge[0], node2 = edge[1];
-       sum += getEdgeScore(G1->getEdgeWeight(node1,node2), G2->getEdgeWeight(A[node1],A[node2]));
+       if(G2->hasEdge(A[node1],A[node2]))
+	   sum += getEdgeScore(G1->getEdgeWeight(node1,node2), G2->getEdgeWeight(A[node1],A[node2]));
     }
     return sum;
 }
@@ -59,21 +60,16 @@ double EdgeGeoMean::getIncChangeOp(const uint peg, const uint oldHole, const uin
 }
 
 double EdgeGeoMean::computeIncChangeOp(uint peg, uint oldHole, uint newHole, const Alignment &A) {
-    double edgeDiff = 0;
-    double c = 0;
+    double diff = 0;
     for (uint nbr : *(G1->getAdjList(peg))) {
-        double y = -getEdgeScore(G1->getEdgeWeight(peg, nbr), G2->getEdgeWeight(oldHole, A[nbr])) - c;
-        double t = edgeDiff + y;
-        c = (t - edgeDiff ) - y;
-        edgeDiff = t;
+	if(G2->hasEdge(oldHole, A[nbr]))
+	    diff -= getEdgeScore(G1->getEdgeWeight(peg, nbr), G2->getEdgeWeight(oldHole, A[nbr]));
 
         uint nbrHole = nbr == peg ? newHole : A[nbr];
-        y = +getEdgeScore(G1->getEdgeWeight(peg, nbr), G2->getEdgeWeight(newHole, nbrHole)) - c;
-        t = edgeDiff + y;
-        c = (t - edgeDiff) - y;
-        edgeDiff = t;
+	if(G2->hasEdge(newHole, nbrHole))
+	    diff += getEdgeScore(G1->getEdgeWeight(peg, nbr), G2->getEdgeWeight(newHole, nbrHole));
     }
-    return edgeDiff;
+    return diff;
 }
 
 double EdgeGeoMean::getIncSwapOp(const uint peg1, const uint peg2, const uint hole1, const uint hole2, const Alignment &A) {
@@ -87,13 +83,11 @@ double EdgeGeoMean::getIncSwapOp(const uint peg1, const uint peg2, const uint ho
 double EdgeGeoMean::computeIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2, const Alignment &A) {
     if (peg1 == peg2) return 0;
     // Handle peg1
-    double edgeDiff = 0;
+    double diff = 0;
     double c = 0;
     for (uint nbr : *(G1->getAdjList(peg1))) {
-        double y = -getEdgeScore(G1->getEdgeWeight(peg1, nbr), G2->getEdgeWeight(hole1, A[nbr])) - c;
-        double t = edgeDiff + y;
-        c = (t - edgeDiff) - y;
-        edgeDiff= t;
+        if(G2->hasEdge(hole1, A[nbr]))
+	    diff -= getEdgeScore(G1->getEdgeWeight(peg1, nbr), G2->getEdgeWeight(hole1, A[nbr]));
 
         // Determine the new target hole for nbr
         uint nbrHole = 0;
@@ -101,26 +95,20 @@ double EdgeGeoMean::computeIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole
         else if (nbr == peg2) nbrHole = hole1;
         else nbrHole = A[nbr];
 
-        y = +getEdgeScore(G1->getEdgeWeight(peg1, nbr), G2->getEdgeWeight(hole2, nbrHole)) - c;
-        t = edgeDiff+ y;
-        c = (t - edgeDiff) - y;
-        edgeDiff= t;
+        if(G2->hasEdge(hole2, nbrHole))
+	    diff += getEdgeScore(G1->getEdgeWeight(peg1, nbr), G2->getEdgeWeight(hole2, nbrHole));
     }
     // Handle peg2
     for (uint nbr : *(G1->getAdjList(peg2))) {
         if (nbr == peg1) continue;
-        double y = -getEdgeScore(G1->getEdgeWeight(peg2, nbr), G2->getEdgeWeight(hole2, A[nbr])) - c;
-        double t = edgeDiff+ y;
-        c = (t - edgeDiff) - y;
-        edgeDiff= t;
+        if(G2->hasEdge(hole2, A[nbr]))
+	    diff -= getEdgeScore(G1->getEdgeWeight(peg2, nbr), G2->getEdgeWeight(hole2, A[nbr]));
 
         uint nbrHole = (nbr == peg2 ? hole1 : A[nbr]);
-        y = +getEdgeScore(G1->getEdgeWeight(peg2, nbr), G2->getEdgeWeight(hole1, nbrHole)) - c;
-        t = edgeDiff+ y;
-        c = (t - edgeDiff) - y;
-        edgeDiff= t;
+        if(G2->hasEdge(hole1, nbrHole))
+	    diff += getEdgeScore(G1->getEdgeWeight(peg2, nbr), G2->getEdgeWeight(hole1, nbrHole));
     }
-    return edgeDiff;
+    return diff;
 }
 
 

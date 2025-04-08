@@ -21,7 +21,7 @@ double GoldilocksMethod::DEFAULT_TARGET_FINAL_PBAD_DIGITS_FROM_0 = 12; // repres
 double GoldilocksMethod::DEFAULT_TARGET_INITIAL_PBAD = (1-pow(10,-DEFAULT_TARGET_INITIAL_PBAD_DIGITS_FROM_1));
 double GoldilocksMethod::DEFAULT_TARGET_FINAL_PBAD = pow(10,-DEFAULT_TARGET_FINAL_PBAD_DIGITS_FROM_0);
 double GoldilocksMethod::DEFAULT_ERROR_TOL_DIGITS = 0.1; // as a fraction of digits in the last place from the above.
-double GoldilocksMethod::DEFAULT_SAMPLE_TIME = 3;
+double GoldilocksMethod::DEFAULT_SAMPLE_TIME = 30;
 
 
 GoldilocksMethod::GoldilocksMethod():

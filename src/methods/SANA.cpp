@@ -107,6 +107,7 @@ SANA::SANA(const Graph* G1, const Graph* G2,
     edWeight  = MC->getWeight("ed");
     erWeight  = MC->getWeight("er");
     eminWeight= MC->getWeight("emin");
+    egmWeight = MC->getWeight("egm");
     s3Weight  = MC->getWeight("s3");
     jsWeight  = MC->getWeight("js");
     icsWeight = MC->getWeight("ics");
@@ -141,6 +142,7 @@ SANA::SANA(const Graph* G1, const Graph* G2,
     needAligEdges        = icsWeight > 0 or ecWeight > 0 or s3Weight > 0 or wecWeight > 0 or secWeight > 0 or mecWeight > 0 or f_betaWeight > 0;
     needEd               = edWeight > 0; //edge difference
     needEr               = erWeight > 0; //edge ratio
+    needEgm              = egmWeight > 0; //edgeGeoMen
     needEmin             = eminWeight > 0; //edgeMin (FlyWire challenge)
     needSquaredAligEdges = sesWeight > 0; //SES
     needExposedEdges     = eeWeight > 0 or MultiS3::denominator_type == MultiS3::ee_global; //EE; if needMS3, might use EE as denom
@@ -2287,7 +2289,7 @@ double SANA::getEquilibriumPBadAtTemp(double temp, double maxTimeInS, int logLev
     if (logLevel >= 0) {
         cout<<"> getEquilibriumPBadAtTemp("<<temp<<") = "<<pBadAvgAtEq<<" (score: "<<currentScore<<")";
         if (reachedEquilibrium) cout<<" (time: "<<timer.elapsed()<<"s)";
-        else cout<<" (didn't detect eq. after "<<maxSeconds<<"s)";
+        else cout<<" (didn't detect eq. after "<<maxTimeInS<<"s)";
         cout<<" iterations = "<<iter<<", ips = "<<nextIps<<endl;
         if (verbose) cerr<<"final result: "<<pBadAvgAtEq<<endl
                          <<"****************************************"<<endl<<endl;

@@ -162,7 +162,6 @@ SANA* MethodSelector::initSANA(const Graph& G1, const Graph& G2,
         }
         GoldilocksMethod::setSana(sana);
         auto goldilocksMethod = getGoldilocksMethod(goldilocksMethodName);
-        goldilocksMethod->setSampleTime(2);
         GoldilocksMethod::Resources maxRes(60, 200.0); //#samples, seconds
         if (useMethodForTIni) {
             sana->setTInitial(goldilocksMethod->computeTInitial(maxRes));
