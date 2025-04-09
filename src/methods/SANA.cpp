@@ -610,32 +610,45 @@ double SANA::slowMeanPBad() {
 
 double SANA::eval(const Alignment& Al) const { return MC->eval(Al); }
 
-void sigIntHandler(int s) {
+void sigHandler(int s) {
     string line;
     int c = -1;
-    do {
-        cout<<"Select an option (0 - 3):"<<endl<<"  (0) Do nothing and continue"<<endl<<"  (1) Exit"<<endl
-            <<"  (2) Save Alignment and Exit"<<endl<<"  (3) Save Alignment and Continue"<<endl<<">> ";
-        cin >> c;
-        if (cin.eof()) exit(0);
-        if (cin.fail()) {
-            c = -1;
-            cin.clear();
-            cin.ignore(numeric_limits<streamsize>::max(), '\n');
-        }
-        if      (c == 0) cout<<"Continuing..."<<endl;
-        else if (c == 1) exit(0);
-        else if (c == 2) SANA::saveAligAndExitOnInterruption = true;
-        else if (c == 3) SANA::saveAligAndContOnInterruption = true;
-    } while (c < 0 || c > 3);
+    if(SIGINT) { // probably an interactive ^C
+	do {
+	    cout<<"Select an option (0 - 3):"<<endl<<"  (0) Do nothing and continue"<<endl<<"  (1) Exit"<<endl
+		<<"  (2) Save Alignment and Exit"<<endl<<"  (3) Save Alignment and Continue"<<endl<<">> ";
+	    cin >> c;
+	    if (cin.eof()) { // hmm, assume ^D means "save and continue"
+		SANA::saveAligAndContOnInterruption = true;
+		cin.clear();
+		return;
+	    }
+	    if (cin.fail()) {
+		c = -1;
+		cin.clear();
+		cin.ignore(numeric_limits<streamsize>::max(), '\n');
+	    }
+	    if      (c == 0) cout<<"Continuing..."<<endl;
+	    else if (c == 1) exit(0);
+	    else if (c == 2) SANA::saveAligAndExitOnInterruption = true;
+	    else if (c == 3) SANA::saveAligAndContOnInterruption = true;
+	} while (c < 0 || c > 3);
+    }
+    else if(s == SIGTERM) // probably sent via top(1), so save and exit
+	SANA::saveAligAndExitOnInterruption = true;
+    else // any other signal (eg USR1 or something unexpected), save and continue
+	SANA::saveAligAndContOnInterruption = true;
 }
+
 void SANA::setInterruptSignal() {
     saveAligAndExitOnInterruption = false;
     struct sigaction sigInt;
-    sigInt.sa_handler = sigIntHandler;
+    sigInt.sa_handler = sigHandler;
     sigemptyset(&sigInt.sa_mask);
     sigInt.sa_flags = 0;
     sigaction(SIGINT, &sigInt, NULL);
+    sigaction(SIGTERM, &sigInt, NULL);
+    sigaction(SIGHUP, &sigInt, NULL);
 }
 void SANA::printReportOnInterruption() {
     saveAligAndContOnInterruption = false; //reset value
