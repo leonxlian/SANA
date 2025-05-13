@@ -20,6 +20,7 @@ REG_DIR=regression-tests/EdgeRatio
 
 nets="150 WMean_con WMean_ocd"
 TRIES=10 # sometimes these fail at random; try a few times just in case
+PARA_STATUS=0
 
 while [ $TRIES -gt 0 ]; do
     (( TRIES-- ))
@@ -48,7 +49,7 @@ while [ $TRIES -gt 0 ]; do
 	nets="$nets_failed"
     fi
 done
-NUM_FAILS=`echo $nets_failed | wc -w`
+NUM_FAILS=$(expr $PARA_STATUS + $(echo $nets_failed | wc -w))
 
 echo "Done testing measurement Edge Ratio; $NUM_FAILS failures"
 exit $NUM_FAILS
