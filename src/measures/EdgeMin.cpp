@@ -12,13 +12,13 @@ EdgeMin::EdgeMin(const Graph* G1, const Graph* G2): Measure(G1, G2, "emin") {
     assert(EdgeMin::G2==NULL);
     EdgeMin::G1=G1;
     EdgeMin::G2=G2;
-    EdgeMin::denominator=computeDenom(G1,G2);
+    EdgeMin::denominator=computeDenom();
     // Ensure we don't try to set them twice
 }
 
 EdgeMin::~EdgeMin() {}
 
-double EdgeMin::computeDenom(const Graph* G1, const Graph* G2) {
+double EdgeMin::computeDenom() {
     // getTotalEdgeWeight doesn't work because if the edges are signed the result is close to zero.
     // double val = min(G1->getTotalEdgeWeight(), G2->getTotalEdgeWeight());
     double ew, sumG1=0, sumG2=0;
@@ -74,7 +74,7 @@ static double a[MAX_A_ARRAY];
 
 // Score the contribution of peg's aligned edges while in hole1, optionally avoiding "avoidPeg" if it's a neighbor.
 // Thanks to Marcus Longo for this idea (2025-01-27)
-double EdgeMin::scoreOnePegSlow(const Graph* G1, const uint peg, const uint avoidPeg, const Graph* G2, const uint hole, const Alignment& A) {
+double EdgeMin::scoreOnePegSlow(const uint peg, const uint avoidPeg, const uint hole, const Alignment& A) {
     int ai=0, aSize=(G1->getAdjList(peg))->size() + (G1->getInjList(peg))->size() + 3; // 3 subtractions below
     assert(aSize <= MAX_A_ARRAY);
 
@@ -144,8 +144,8 @@ double EdgeMin::computeIncChangeOp(const uint peg, const uint oldHole, const uin
 // actually, now that I've moved the incremental code here and am using copies of G1 and G2, it's scoreOnePeg
 // that is broken... but it's NOT when I leave it in SANA.cpp???
     double noAvoid = G1->getNumNodes();
-    double before = scoreOnePegSlow(G1,peg,noAvoid, G2, oldHole, A);
-    double after  = scoreOnePegSlow(G1,peg,noAvoid, G2, newHole, A);
+    double before = scoreOnePegSlow(peg, noAvoid, oldHole, A);
+    double after  = scoreOnePegSlow(peg, noAvoid, newHole, A);
     static int bad; printf("[%d bad] old %g Marcus %g diff %g\n", bad, old, after-before, after-before-old); assert(++bad<999);
     printf("O"); fflush(stdout);
     if(fabs(after-before-old)<1e-19) return old;
@@ -219,12 +219,12 @@ double EdgeMin::computeIncSwapOp2(const uint peg1, const uint peg2, const uint h
     assert(A[peg1] == hole1 && A[peg2] == hole2);
     assert (peg1 != peg2); // return 0;
     double noAvoid = G1->getNumNodes();
-    double old = scoreOnePegSlow(G1,peg1,noAvoid, G2, hole1, A); // score outward and inward A-aligned edges of peg1
-    old       += scoreOnePegSlow(G1,peg2,peg1,    G2, hole2, A); // score out&in as above for peg2 EXCEPT if going to peg1
+    double old = scoreOnePegSlow(peg1,noAvoid, hole1, A); // score outward and inward A-aligned edges of peg1
+    old       += scoreOnePegSlow(peg2,peg1,    hole2, A); // score out&in as above for peg2 EXCEPT if going to peg1
     // Note we must PHYSICALLY swap peg1+peg2 in A, in order to correctly score the new position
     A[peg1] = hole2; A[peg2] = hole1;
-    double New = scoreOnePegSlow(G1,peg2,noAvoid, G2, hole1, A); // score outward and inward aligned edges of peg1
-    New       += scoreOnePegSlow(G1,peg1,peg2,    G2, hole2, A); // score out&in as above for peg2 EXCEPT if going to peg1
+    double New = scoreOnePegSlow(peg2,noAvoid, hole1, A); // score outward and inward aligned edges of peg1
+    New       += scoreOnePegSlow(peg1,peg2,    hole2, A); // score out&in as above for peg2 EXCEPT if going to peg1
     A[peg1] = hole1; A[peg2] = hole2;
     return New-old;
 }
