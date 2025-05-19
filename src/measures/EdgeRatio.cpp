@@ -12,14 +12,18 @@ EdgeRatio::EdgeRatio(const Graph* G1, const Graph* G2): Measure(G1, G2, "er") {
 EdgeRatio::~EdgeRatio() {}
 
 double EdgeRatio::computeDenom() {
-    return G1->getNumEdges();*
+    return G1->getNumEdges();
+}
+
+double EdgeRatio::getSum(const Alignment &A) {
+    return computeSum(A);
 }
 
 double EdgeRatio::eval(const Alignment& A) {
 #ifndef WEIGHT
     return kErrorScore;
 #else
-    return getEdgeRatioSum(A);
+    return computeSum(A);
 #endif
 }
 
@@ -34,14 +38,14 @@ double EdgeRatio::getRatio(double w1, double w2) {
 
 double EdgeRatio::getAligEdgeScore(const uint u1, const uint v1, const uint u2, const uint v2){
     // The maximum possible score is attained during a correct self-alignment, in which case every edge has a ratio of 1.
-    return getRatio(G1->getEdgeWeight(u1, v1), G2->getEdgeWeight(u2, v2)) / G1->getNumEdges();
+    return getRatio(G1->getEdgeWeight(u1, v1), G2->getEdgeWeight(u2, v2)) / denominator;
 }
 
 #define MALE_FLY_EDGES 4158055
 #define MAX_A_ARRAY (8*MALE_FLY_EDGES)
 static double a[MAX_A_ARRAY];
 
-double EdgeRatio::getEdgeRatioSum(const Alignment &A) {
+double EdgeRatio::computeSum(const Alignment &A) {
 #ifndef WEIGHT
     return 0;
 #else
