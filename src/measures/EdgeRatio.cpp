@@ -5,6 +5,9 @@
 
 const Graph *EdgeRatio::G1, *EdgeRatio::G2;
 EdgeRatio::EdgeRatio(const Graph* G1, const Graph* G2): Measure(G1, G2, "er") {
+    assert(EdgeMin::denominator==0);
+    assert(EdgeMin::G1==NULL);
+    assert(EdgeMin::G2==NULL);
     EdgeRatio::G1=G1;
     EdgeRatio::G2=G2;
     EdgeRatio::denominator=computeDenom();

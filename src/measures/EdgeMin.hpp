@@ -21,6 +21,7 @@ private:
     static const Graph *G1, *G2;
     static double denominator;
 
+    static double getMin(const double w1, const double w2);
     static double computeIncChangeOp(const uint peg, const uint oldHole, const uint newHole, const Alignment &A);
     static double computeIncSwapOp  (const uint peg1, const uint peg2, const uint hole1, const uint hole2, const Alignment &A);
     static double computeIncSwapOp2 (uint const peg1, const uint peg2, const uint hole1, const uint hole2, const Alignment &A);
