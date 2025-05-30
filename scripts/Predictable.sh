@@ -101,7 +101,7 @@ egrep "^($tax1)	" $GO1.$GENE2GO | cut -f1-5,8 > $TMPDIR/GO1.tax1.$GENE2GO.1-5,8
 	    # predictable annotation if node is in earlier target network and earlier source network has such a GO term
 	    for(p in V2) for(g in GO1tax1) if(g in GO1freq && GO1freq[g] <= '$GO1freq') for(e in GO1tax1[g])
 		# if not filtering on validatable, or if annotation (p,g) is validatable:
-		if(p in Vable && g in Vable[p]) for(t in Vable[p][g]) if(e in Vable[p][g][t])
+		if(p in Vable && g in Vable[p]) for(t in Vable[p][g]) # WTF? Why? if(e in Vable[p][g][t])
 		    printf "%d\t%s\t%s\t%s\t%s\n",t,p,g,e,Cat[g]
 		    # Would could be even more specific here and when we copy a GO term from p1\in V1 to p2\in V2,
 		    # we list *only* the (GO,evc) pairs assigned to p1, rather than all (GO,evc) pairs seen across all of V1.
