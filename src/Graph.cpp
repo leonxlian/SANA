@@ -27,7 +27,7 @@ const string Graph::DEFAULT_COLOR_NAME = "__default";
 const uint Graph::INVALID_COLOR_ID = 9999999;
 
 Graph::Graph(const bool directed, const string& graphName, const string& optionalFilePath,
-             const vector<array<uint, 2>>& edgeList,
+	     const vector<array<uint, 2>>& edgeList,
              const vector<string>& optionalNodeNames,
              const vector<EDGE_T>& optionalEdgeWeights,
              const vector<array<string, 2>>& partialNodeColorPairs):
