@@ -612,7 +612,7 @@ double SANA::eval(const Alignment& Al) const { return MC->eval(Al); }
 
 void sigHandler(int s) {
     string line;
-    int c = -1;
+    int c = 3; // default to save and continue
     if(SIGINT) { // probably an interactive ^C
 	do {
 	    cout<<"Select an option (0 - 3):"<<endl<<"  (0) Do nothing and continue"<<endl<<"  (1) Exit"<<endl
