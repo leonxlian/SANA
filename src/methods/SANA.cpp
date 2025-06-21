@@ -50,6 +50,8 @@ using namespace std;
 static double _predictedScore1, _predictedScore2;
 #endif
 
+static uint _numNonstationaryColors, *_pickArrayNum; // needed for MAX_STATIONARY
+
 //static fields
 bool SANA::saveAligAndExitOnInterruption = false;
 bool SANA::saveAligAndContOnInterruption = false;
@@ -101,6 +103,8 @@ SANA::SANA(const Graph* G1, const Graph* G2,
     initializedIterPerSecond = false;
     pBadBuffer = vector<double> (PBAD_CIRCULAR_BUFFER_SIZE, 0);
     stationary = vector<uint> (n1, 0);
+    _pickArrayNum = (uint*)calloc(sizeof(uint),G1->numColors());
+    _numNonstationaryColors = G1->numColors();
 
     //objective function
     ecWeight  = MC->getWeight("ec");
@@ -372,7 +376,7 @@ Alignment SANA::runUsingIterations() {
 
     long long int iter;
     _reallyRunning=true;
-    for (iter = 0; iter <= maxIters; iter++) {
+    for (iter = 0; iter <= maxIters && _numNonstationaryColors>0; iter++) {
         Temperature = temperatureFunction(float(iter)/maxIters, TInitial, TDecay);
         SANAIteration();
         if (saveAligAndExitOnInterruption) break;
@@ -442,7 +446,7 @@ Alignment SANA::runUsingConfidenceIntervals() {
         Temperature = temperatureFunction(tau, TInitial, TDecay);
 	// Now the "inner loop"
 	Boolean satisfied = false;
-	while(!satisfied) {
+	while(!satisfied && _numNonstationaryColors>0) {
 	    if (saveAligAndExitOnInterruption) break;
 	    if (saveAligAndContOnInterruption) printReportOnInterruption();
 
@@ -513,7 +517,7 @@ Alignment SANA::runUsingConfidenceIntervals() {
 		}
 	    }
 	}
-	assert(satisfied);
+	assert(_numNonstationaryColors==0 || satisfied);
 	trackProgress(batch, tau, batchesPerTemperature, StatMean(scoreBatchMeans), StatMean(pBadBatchMeans));
 	if(tauStep < MAX_TAU_STEP) {
 	    if(StatNumSamples(scoreBatchMeans) < HAPPY_BATCHES) {
@@ -557,7 +561,7 @@ void SANA::performHillClimbing(long long int idleCountTarget) {
     Timer T;
     T.start();
     uint idleCount = 0;
-    while(idleCount < idleCountTarget) {
+    while(idleCount < idleCountTarget && _numNonstationaryColors>0) {
         if (iter%iterationsPerStep == 0) trackProgress(iter, float(iter)/idleCountTarget);
         double oldScore = currentScore;
         SANAIteration();
@@ -666,7 +670,10 @@ void SANA::printReportOnInterruption() {
 
 void SANA::SANAIteration() {
     ++iterationsPerformed;
-    uint actColId = randActiveColorIdWeightedByNumNbrs();
+    uint actColId;
+    do
+	actColId = randActiveColorIdWeightedByNumNbrs();
+    while(_reallyRunning && _pickArrayNum[actColToG1ColId[actColId]]==0); // find a color that has non-stationary nodes
     double p = randomReal(gen);
     if (p < actColToChangeProb[actColId]) performChange(actColId);
     else performSwap(actColId);
@@ -700,34 +707,70 @@ uint SANA::randomG1NodeWithActiveColor(uint actColId, bool dynamic) const {
     static char *MAX_ST;
     if(MAX_STATIONARY == 999999999) {
 	MAX_ST = getenv("MAX_STATIONARY");
-       	if(MAX_ST) MAX_STATIONARY = (uint)atoi(MAX_ST);
+	if(MAX_ST) printf("Setting MAX_ST to %u\n", MAX_STATIONARY = (uint)atoi(MAX_ST));
 	else MAX_STATIONARY = 0;
     }
-    static bool _init;
-    static uint totalDegree, pickArrayNum, *pickNodeArray, *numPickEntries, prevIndex;
-    if(MAX_STATIONARY && _reallyRunning && dynamic){
-	if(!_init) {
-	    cerr << "PICK_NODE_ARARY INIT STUFF" << endl;
-	    assert(g1ColId == 0); // FIXME: only handling one color for now.
-	    numPickEntries = (uint*)calloc(sizeof(uint),G1->getNumNodes());
-	    for(uint i=0; i<G1->getNumNodes(); i++) totalDegree += (numPickEntries[i] = G1->adjLists[i].size());
-	    totalDegree *= 2;
-	    pickNodeArray = (uint*)calloc(sizeof(uint),totalDegree);
-	    for(uint i=0; i<G1->getNumNodes(); i++) for(uint j=0;j<G1->adjLists[i].size();j++) pickNodeArray[pickArrayNum++]=i;
-	    _init = true;
+
+    // Stuff for MAX_STATIONARY only
+    static bool _init, *_warned;
+    static uint *totalDegree, **pickNodeArray, **numPickEntries, *prevIndex;
+    if(MAX_STATIONARY && !_init) {
+	cerr << "PICK_NODE_ARARY INIT STUFF" << endl;
+	_warned = (bool*)calloc(sizeof(bool),G1->numColors());
+	totalDegree = (uint*)calloc(sizeof(uint),G1->numColors());
+	prevIndex   = (uint*)calloc(sizeof(uint),G1->numColors());
+	numPickEntries = (uint**)calloc(sizeof(uint*),G1->numColors());
+	pickNodeArray  = (uint**)calloc(sizeof(uint*),G1->numColors());
+	for(uint c=0; c<G1->numColors(); c++) {
+	    numPickEntries[c]= (uint*)calloc(sizeof(uint), G1->numNodesWithColor(c));
+	    // This loop computes totalDegree[c], among other things
+	    for(uint i=0; i<G1->numNodesWithColor(c); i++) {
+		uint node = G1->nodeGroupsByColor[c][i];
+		// FIXME: do we need to condition this on the neighbors of the same color as "node"?
+		totalDegree[c] += (numPickEntries[c][i] = G1->adjLists[node].size());
+	    }
+	    totalDegree[c] *= 2;
+	    pickNodeArray[c] = (uint*)calloc(sizeof(uint), totalDegree[c]);
+	    // second loop that USES totalDegree[c] that was computed above.
+	    for(uint i=0; i<G1->numNodesWithColor(c); i++) {
+		uint node = G1->nodeGroupsByColor[c][i];
+		for(uint j=0;j<G1->adjLists[node].size();j++)
+		    pickNodeArray[c][_pickArrayNum[c]++]=i; // need to use INDEX for this color and get node later
+	    }
+	    assert(_pickArrayNum[c] <= totalDegree[c]);
 	}
-	int prevNode = pickNodeArray[prevIndex];
-	if(stationary[prevNode] >= MAX_STATIONARY && numPickEntries[prevNode] > 1) { // Nuke one entry for the one that was a good move
-	    //printf("%d=>%d ", prevNode, numPickEntries[prevNode]);
-	    --numPickEntries[prevNode];
-	    pickNodeArray[prevIndex] = pickNodeArray[--pickArrayNum]; // move last entry in array to prevIndex position
-	}
-	uint randIndex = randInt(0, pickArrayNum-1);
-	assert(0 <= randIndex && randIndex < pickArrayNum);
-	return pickNodeArray[prevIndex = randIndex];
+	_init = true;
     }
-    uint randIndex = randInt(0, G1->nodeGroupsByColor[g1ColId].size()-1);
-    return G1->nodeGroupsByColor[g1ColId][randIndex];
+
+    uint randNodeIndexOfColor;
+    if(MAX_STATIONARY && _reallyRunning && dynamic) {
+	int prevNodeIndex = pickNodeArray[g1ColId][prevIndex[g1ColId]];
+	uint node = G1->nodeGroupsByColor[g1ColId][prevNodeIndex];
+	if(stationary[node] >= MAX_STATIONARY && numPickEntries[g1ColId][prevNodeIndex] > 0) {
+	    // Nuke one entry for the one that was a good move
+	    --numPickEntries[g1ColId][prevNodeIndex];
+	    //printf("%d=>%d ", node, numPickEntries[g1ColId][prevNodeIndex]); // very verbose
+	    //if(numPickEntries[g1ColId][prevNodeIndex] == 0) printf("%d ", node);
+	    assert(_pickArrayNum[g1ColId] > 0);
+	    pickNodeArray[g1ColId][prevIndex[g1ColId]] =
+		pickNodeArray[g1ColId][--_pickArrayNum[g1ColId]]; // move last entry in array to prevIndex position
+	}
+	if(_pickArrayNum[g1ColId] == 0) {
+	    assert(!_warned[g1ColId]);
+	    cerr << "Note: G1 nodes of color "+G1->getColorName(g1ColId)+" are now all stationary\n";
+	    _warned[g1ColId]=true;
+	    assert(_numNonstationaryColors > 0);
+	    --_numNonstationaryColors;
+	    if(_numNonstationaryColors == 0) cout << "All pegs of all colors are now stationary\n";
+	    prevIndex[g1ColId] = 0;
+	} else
+	    prevIndex[g1ColId] = randInt(0, _pickArrayNum[g1ColId]-1);
+	randNodeIndexOfColor = pickNodeArray[g1ColId][prevIndex[g1ColId]];
+    }
+    else
+	randNodeIndexOfColor = randInt(0, G1->nodeGroupsByColor[g1ColId].size()-1);
+    assert(0 <= randNodeIndexOfColor && randNodeIndexOfColor < G1->numNodesWithColor(g1ColId));
+    return G1->nodeGroupsByColor[g1ColId][randNodeIndexOfColor];
 }
 
 void SANA::performChange(uint actColId) {
@@ -834,7 +877,6 @@ void SANA::performChange(uint actColId) {
 }
 
 void SANA::performSwap(uint actColId) {
-
     uint peg1 = randomG1NodeWithActiveColor(actColId, true);
     uint peg2;
     for (uint i = 0; i < 100; i++) { //each attempt has >=50% chance of success
@@ -1196,13 +1238,6 @@ int SANA::aligEdgesIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
     return res;
 #endif // WEIGHT
 }
-
-
-
-#define MALE_FLY_EDGES 4158055
-#define MAX_A_ARRAY (8*MALE_FLY_EDGES)
-static double a[MAX_A_ARRAY];
-
 
 
 // UGLY GORY HACK BELOW!! Sometimes the edgeVal is crazily wrong, like way above 1,000, when it
@@ -2201,7 +2236,7 @@ void SANA::initIterPerSecond() {
     } else {
         Temperature = TInitial;
         cout << "Since temperature goldilocks is provided, ips will be calculated using constantTempIterations at temperature " << Temperature << endl;
-        long long int iter = 1E5;
+        long long int iter = 100000;
         constantTempIterations(iter - 1);
         double res = iter/timer.elapsed();
         totalIps = res;
@@ -2220,8 +2255,8 @@ void SANA::initIterPerSecond() {
 void SANA::constantTempIterations(long long int iterTarget) {
     initDataStructures();
     long long int iter;
-    for (iter = 1; iter < iterTarget ; ++iter) {
-        if (iter%iterationsPerStep == 0) trackProgress(iter, float(iter)/iterTarget);
+    for (iter = 0; iter < iterTarget ; ++iter) {
+        if (iter && iter%iterationsPerStep == 0) trackProgress(iter, float(iter)/iterTarget);
         SANAIteration();
     }
     trackProgress(iter, float(iter)/iterTarget);

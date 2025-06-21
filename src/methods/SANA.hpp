@@ -84,6 +84,8 @@ private:
 
     //store whether or not most recent move was bad
     bool wasBadMove;
+
+    // used only if MAX_STATIONARY is set (via getenv)
     vector<uint> stationary;
 
     //data structures for the networks
