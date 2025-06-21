@@ -50,7 +50,9 @@ using namespace std;
 static double _predictedScore1, _predictedScore2;
 #endif
 
-static uint _numNonstationaryColors, *_pickArrayNum; // needed for MAX_STATIONARY
+// Stuff for MAX_STATIONARY
+#define MAX_ST_INVALID 65535 // just in case int is 16 bits
+static uint MAX_STATIONARY = MAX_ST_INVALID, _numNonstationaryColors, *_pickArrayNum;
 
 //static fields
 bool SANA::saveAligAndExitOnInterruption = false;
@@ -673,7 +675,7 @@ void SANA::SANAIteration() {
     uint actColId;
     do
 	actColId = randActiveColorIdWeightedByNumNbrs();
-    while(_reallyRunning && _pickArrayNum[actColToG1ColId[actColId]]==0); // find a color that has non-stationary nodes
+    while(_reallyRunning && MAX_STATIONARY && _pickArrayNum[actColToG1ColId[actColId]]==0); // find a color that has non-stationary nodes
     double p = randomReal(gen);
     if (p < actColToChangeProb[actColId]) performChange(actColId);
     else performSwap(actColId);
@@ -700,15 +702,13 @@ uint SANA::randActiveColorIdWeightedByNumNbrs() {
     return iter - actColToAccumProbCutpoint.begin();
 }
 
-static uint MAX_STATIONARY = 999999999;
-
 uint SANA::randomG1NodeWithActiveColor(uint actColId, bool dynamic) const {
     uint g1ColId = actColToG1ColId[actColId];
-    static char *MAX_ST;
-    if(MAX_STATIONARY == 999999999) {
-	MAX_ST = getenv("MAX_STATIONARY");
-	if(MAX_ST) printf("Setting MAX_ST to %u\n", MAX_STATIONARY = (uint)atoi(MAX_ST));
+    if(MAX_STATIONARY == MAX_ST_INVALID) {
+	char *s = getenv("MAX_STATIONARY");
+	if(s) printf("Setting MAX_ST to %u\n", MAX_STATIONARY = (uint)atoi(s));
 	else MAX_STATIONARY = 0;
+	assert(MAX_STATIONARY != MAX_ST_INVALID);
     }
 
     // Stuff for MAX_STATIONARY only
@@ -825,11 +825,6 @@ void SANA::performChange(uint actColId) {
     bool makeChange;
     //if(newCurrentScore == currentScore) makeChange = false; else // if it ain't broke, don't fix it
     makeChange = randomReal(gen) < pBad;
-    if(makeChange) stationary[peg]=0;
-    else {
-	if(stationary[peg] > MAX_STATIONARY) stationary[peg]=0;
-	++stationary[peg];
-    }
 
 #ifdef CORES
     // Statistics on the emerging core alignment.
@@ -843,6 +838,7 @@ void SANA::performChange(uint actColId) {
 #endif
 
     if (makeChange) {
+	stationary[peg]=0;
         A[peg] = newHole;
         actColToUnassignedG2Nodes[actColId][unassignedVecIndex] = oldHole;
         assignedNodesG2[oldHole] = false;
@@ -861,12 +857,14 @@ void SANA::performChange(uint actColId) {
         EdgeExposure::numer           = newExposedEdgesNumer;
         squaredAligEdges              = newSquaredAligEdges;
         MultiS3::numer                = newMS3Numer;
-    }
-    else if (needMS3) {
-        MultiS3::shadowDegree[oldHole] = saveOldHoleDeg;
-        MultiS3::shadowDegree[newHole] = saveNewHoleDeg;
-        MultiS3::denom = oldMs3Denom;
-        MultiS3::numer = oldMs3Numer;
+    } else {
+	if(stationary[peg] >= MAX_STATIONARY) stationary[peg]=0; else ++stationary[peg];
+	if (needMS3) {
+	    MultiS3::shadowDegree[oldHole] = saveOldHoleDeg;
+	    MultiS3::shadowDegree[newHole] = saveNewHoleDeg;
+	    MultiS3::denom = oldMs3Denom;
+	    MultiS3::numer = oldMs3Numer;
+	}
     }
 #if 0
     uint correct = ((MultiS3*)MC->getMeasure("ms3"))->computeNumer(A);
@@ -928,12 +926,6 @@ void SANA::performSwap(uint actColId) {
     bool makeChange;
     //if(newCurrentScore == currentScore) makeChange = false; else // if it ain't broke, don't fix it
     makeChange = randomReal(gen) < pBad;
-    if(makeChange) stationary[peg1]=stationary[peg2]=0;
-    else {
-	if(stationary[peg1]>MAX_STATIONARY) stationary[peg1]=0;
-	if(stationary[peg2]>MAX_STATIONARY) stationary[peg2]=0;
-	++stationary[peg1]; ++stationary[peg2];
-    }
 
 #ifdef CORES
         // Statistics on the emerging core alignment.
@@ -948,6 +940,7 @@ void SANA::performSwap(uint actColId) {
 #endif
 
     if (makeChange) {
+	stationary[peg1]=stationary[peg2]=0;
         A[peg1]          = hole2;
         A[peg2]          = hole1;
         aligEdges           = newAligEdges;
@@ -963,10 +956,14 @@ void SANA::performSwap(uint actColId) {
         EdgeExposure::numer = newExposedEdgesNumer;
         MultiS3::numer      = newMS3Numer;
         if (needLocal) localScoreSumMap = newLocalScoreSumMap;
-    } else if (needMS3) {
-        MultiS3::shadowDegree[hole1] = oldHole1Deg;
-        MultiS3::shadowDegree[hole2] = oldHole2Deg;
-        MultiS3::denom = oldMs3Denom;
+    } else {
+	if(stationary[peg1]>=MAX_STATIONARY) stationary[peg1]=0; else ++stationary[peg1];
+	if(stationary[peg2]>=MAX_STATIONARY) stationary[peg2]=0; else ++stationary[peg2];
+	if (needMS3) {
+	    MultiS3::shadowDegree[hole1] = oldHole1Deg;
+	    MultiS3::shadowDegree[hole2] = oldHole2Deg;
+	    MultiS3::denom = oldMs3Denom;
+	}
     }
 }
 
