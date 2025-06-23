@@ -105,7 +105,6 @@ SANA::SANA(const Graph* G1, const Graph* G2,
     initializedIterPerSecond = false;
     pBadBuffer = vector<double> (PBAD_CIRCULAR_BUFFER_SIZE, 0);
     stationary = vector<uint> (n1, 0);
-    _pickArrayNum = (uint*)calloc(sizeof(uint),G1->numColors());
     _numNonstationaryColors = G1->numColors();
 
     //objective function
@@ -281,6 +280,12 @@ SANA::~SANA() {}
 //even for data structures initialized here, any space allocation for them
 //should be done in the constructor, not here, to avoid memory leaks
 void SANA::initDataStructures() {
+    if(MAX_STATIONARY == MAX_ST_INVALID) {
+	char *s = getenv("MAX_STATIONARY");
+	if(s) printf("Setting MAX_ST to %u\n", MAX_STATIONARY = (uint)atoi(s));
+	else MAX_STATIONARY = 0;
+	assert(MAX_STATIONARY != MAX_ST_INVALID);
+    }
     iterationsPerformed = 0;
     numPBadsInBuffer = pBadBufferSum = pBadBufferIndex = 0;
     Alignment alig;
@@ -362,6 +367,9 @@ void SANA::initDataStructures() {
 bool _reallyRunning;
 
 Alignment SANA::run() {
+    initDataStructures();
+    setInterruptSignal();
+
     if(tolerance > 0)
 	return runUsingConfidenceIntervals();
     else
@@ -369,16 +377,13 @@ Alignment SANA::run() {
 }
 
 Alignment SANA::runUsingIterations() {
-    initDataStructures();
-    setInterruptSignal();
-
     long long int maxIters = useIterations ? maxIterations : (long long int) (getIterPerSecond()*maxSeconds);
     double leeway = 2;
     double maxSecondsWithLeeway = maxSeconds * leeway;
 
     long long int iter;
     _reallyRunning=true;
-    for (iter = 0; iter <= maxIters && _numNonstationaryColors>0; iter++) {
+    for (iter = 1; iter <= maxIters && _numNonstationaryColors>0; iter++) {
         Temperature = temperatureFunction(float(iter)/maxIters, TInitial, TDecay);
         SANAIteration();
         if (saveAligAndExitOnInterruption) break;
@@ -416,9 +421,6 @@ Alignment SANA::runUsingIterations() {
 #define TOL_SAFETY_MARGIN 1.07 // empirically this seems to cut failure rates to below 5%.
 
 Alignment SANA::runUsingConfidenceIntervals() {
-    initDataStructures();
-    setInterruptSignal();
-
     if(!multi_iteration_only) getIterPerSecond(); // avoid wasting several seconds of CPU time
     iterationsPerStep = 1; // this code doesn't use "steps"
     // FIXME: make all of these changeable on the command line
@@ -673,9 +675,9 @@ void SANA::printReportOnInterruption() {
 void SANA::SANAIteration() {
     ++iterationsPerformed;
     uint actColId;
-    do
+    do {
 	actColId = randActiveColorIdWeightedByNumNbrs();
-    while(_reallyRunning && MAX_STATIONARY && _pickArrayNum[actColToG1ColId[actColId]]==0); // find a color that has non-stationary nodes
+    } while(_reallyRunning && MAX_STATIONARY && _pickArrayNum && _pickArrayNum[actColToG1ColId[actColId]]==0); // find a color that has non-stationary nodes
     double p = randomReal(gen);
     if (p < actColToChangeProb[actColId]) performChange(actColId);
     else performSwap(actColId);
@@ -704,17 +706,11 @@ uint SANA::randActiveColorIdWeightedByNumNbrs() {
 
 uint SANA::randomG1NodeWithActiveColor(uint actColId, bool dynamic) const {
     uint g1ColId = actColToG1ColId[actColId];
-    if(MAX_STATIONARY == MAX_ST_INVALID) {
-	char *s = getenv("MAX_STATIONARY");
-	if(s) printf("Setting MAX_ST to %u\n", MAX_STATIONARY = (uint)atoi(s));
-	else MAX_STATIONARY = 0;
-	assert(MAX_STATIONARY != MAX_ST_INVALID);
-    }
-
     // Stuff for MAX_STATIONARY only
     static bool _init, *_warned;
     static uint *totalDegree, **pickNodeArray, **numPickEntries, *prevIndex;
     if(MAX_STATIONARY && !_init) {
+	_pickArrayNum = (uint*)calloc(sizeof(uint),G1->numColors());
 	cerr << "PICK_NODE_ARARY INIT STUFF" << endl;
 	_warned = (bool*)calloc(sizeof(bool),G1->numColors());
 	totalDegree = (uint*)calloc(sizeof(uint),G1->numColors());
@@ -737,7 +733,7 @@ uint SANA::randomG1NodeWithActiveColor(uint actColId, bool dynamic) const {
 		for(uint j=0;j<G1->adjLists[node].size();j++)
 		    pickNodeArray[c][_pickArrayNum[c]++]=i; // need to use INDEX for this color and get node later
 	    }
-	    assert(_pickArrayNum[c] <= totalDegree[c]);
+	    assert(_pickArrayNum[c]>0 && _pickArrayNum[c] <= totalDegree[c]);
 	}
 	_init = true;
     }
