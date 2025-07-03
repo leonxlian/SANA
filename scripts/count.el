@@ -18,7 +18,7 @@ do
 	if $TYPES; then
 	    awk "$DOS2UNIX"'{node1[$1]=node2[$2]=1;numEdges++}END{for(i in node1)numNodes1++; for(i in node2)numNodes2++; print numNodes1, numNodes2, numEdges, FILENAME}' "$i"
 	else
-	    awk "$DOS2UNIX"'{node[$1]=node[$2]=1}END{printf "%d\t%d\t%s\n", length(node), NR, FILENAME}' "$i"
+	    awk "$DOS2UNIX"'FNR==1&&NF==1{n=1*$1;if($1!=n) exit(1); next}{node[$1]=node[$2]=1}END{if(n && n!=length(node)) printf "mismatch between number of nodes: first line says %d, but length(node) is %d\n", n, length(node) > "/dev/stderr"; else printf "%d\t%d\t%s\n", length(node), NR-!!n, FILENAME}' "$i"
 	fi
 	;;
     esac
