@@ -28,18 +28,18 @@ endif
 ifeq ($(LEGACY), 1)
     $(info LEGACY is: $(LEGACY))
     $(info Legacy build detected.)
-ifdef THREADS
-    $(error Multithreading is not supported for legacy SANA.)
-endif
+    ifdef THREADS
+	$(error Multithreading is not supported for legacy SANA.)
+    endif
     CXXFLAGS := $(CXXFLAGS) -DLEGACY
     MAIN := $(MAIN).legacy
 else
-ifdef THREADS # this is the number of calculator threads
-    CXXFLAGS := $(CXXFLAGS) "-DTHREADS=$(THREADS)"
-    MAIN := $(MAIN).threads.$(THREADS)
-else
-    MAIN := $(MAIN).threads.1
-endif
+    ifdef THREADS # this is the number of calculator threads
+	CXXFLAGS := $(CXXFLAGS) "-DTHREADS=$(THREADS)"
+	MAIN := $(MAIN).threads
+    else
+	MAIN := $(MAIN)
+    endif
 endif
 
 ifeq ($(STATIC), 1)
