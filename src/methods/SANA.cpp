@@ -195,9 +195,9 @@ SANA::SANA(const Graph* G1, const Graph* G2,
     assert(G1->numColors() <= G2->numColors());
     const bool COL_DBG = true; //print stats about color/neighbor type probabilities
 
-    vector<uint> numSwapNeighborsByG1Color(G1->numColors(), 0);
-    vector<uint> numChangeNeighborsByG1Color(G1->numColors(), 0);
-    uint totalNbrCount = 0;
+    vector<ulong> numSwapNeighborsByG1Color(G1->numColors(), 0);
+    vector<ulong> numChangeNeighborsByG1Color(G1->numColors(), 0);
+    ulong totalNbrCount = 0;
     for (uint g1Id = 0; g1Id < G1->numColors(); g1Id++) {
         string colName = G1->getColorName(g1Id);
         if (not G2->hasColor(colName))
@@ -206,10 +206,10 @@ SANA::SANA(const Graph* G1, const Graph* G2,
         uint c2 = G2->numNodesWithColor(G2->getColorId(colName));
         if (c1 > c2) throw runtime_error("there are "+to_string(c1)+" G1 nodes colored "
                     +colName+" but only "+to_string(c2)+" such nodes in G2");
-        uint numSwapNbrs = c1*(c1-1)/2, numChangeNbrs = c1*(c2-c1);
+        ulong numSwapNbrs = c1*(c1-1)/2, numChangeNbrs = c1*(c2-c1);
         numSwapNeighborsByG1Color[g1Id] = numSwapNbrs;
         numChangeNeighborsByG1Color[g1Id] = numChangeNbrs;
-        uint numNbrs = numSwapNbrs + numChangeNbrs;
+        ulong numNbrs = numSwapNbrs + numChangeNbrs;
         totalNbrCount += numNbrs;
         if (COL_DBG) {
             cerr<<"color "<<colName<<" has "<<numSwapNbrs<<" swap nbrs and "
@@ -223,8 +223,8 @@ SANA::SANA(const Graph* G1, const Graph* G2,
 
     //init active color data structures
     for (uint g1Id = 0; g1Id < G1->numColors(); g1Id++) {
-        uint numChangeNbrs = numChangeNeighborsByG1Color[g1Id];
-        uint numNbrs = numChangeNbrs + numSwapNeighborsByG1Color[g1Id];
+        ulong numChangeNbrs = numChangeNeighborsByG1Color[g1Id];
+        ulong numNbrs = numChangeNbrs + numSwapNeighborsByG1Color[g1Id];
         if (numNbrs == 0) continue; //inactive color
         double colorProb = numNbrs / (double) totalNbrCount;
         double accumProb = colorProb +
@@ -243,6 +243,7 @@ SANA::SANA(const Graph* G1, const Graph* G2,
         for (uint i = 0; i < actColToG1ColId.size(); i++) {
             string name = G1->getColorName(actColToG1ColId[i]);
             double colP = actColToAccumProbCutpoint[i] - (i>0 ? actColToAccumProbCutpoint[i-1] : 0);
+	    assert(0 < colP && colP <= 1.0);
             colTable.push_back({to_string(i), name, to_string(colP), to_string(actColToAccumProbCutpoint[i]),
                                 to_string(actColToChangeProb[i]), to_string(1-actColToChangeProb[i])});
         }
