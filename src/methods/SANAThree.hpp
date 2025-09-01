@@ -113,7 +113,7 @@ private:
     private:
         bool _calculatorsOn;
 
-        condition_variable requestProcessed;
+        condition_variable requestsFinished;
         condition_variable startBatch;
         const unsigned _extraThreads;
 
@@ -123,6 +123,7 @@ private:
 
         unsigned long long _inputRequests;
         unsigned long long _outputRequests;
+        unsigned long long _pBadTotal;
 
         SANAThree &_parent;
         mutex _requestSystem;
@@ -161,6 +162,8 @@ private:
     // Main run function and variables
     Alignment alignment;
     double currentScore;
+    uint64_t totalMovesPerformed;
+    uint64_t totalSwapsPerformed;
     void runIterations(CalculatorHandler &threadPool);
     void runConfidenceIntervals(CalculatorHandler &threadPool);
     void runHillClimbing(CalculatorHandler &threadPool);

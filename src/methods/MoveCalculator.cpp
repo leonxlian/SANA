@@ -70,9 +70,11 @@ SANAThree::CalculatorHandler::CalculatorHandler(const unsigned threadNumber, SAN
 }
 
 SANAThree::CalculatorHandler::~CalculatorHandler(){
+    unique_lock<mutex> requestLock (_requestSystem);
     // Ensures all threads are terminated before deconstruction.
     _calculatorsOn = false;
     startBatch.notify_all();
+    requestLock.unlock();
     for (thread& t: _threadVector) {
         t.join();
     }
@@ -88,25 +90,27 @@ SANAThree::batchOutput SANAThree::CalculatorHandler::collectBatch(double tempera
     totalEnergy = 0.;
     totalPBad = 0.;
 
+    requestLock.lock();
     _inputRequests = 0;
     _outputRequests = 0;
+    _pBadTotal = 0;
     startBatch.notify_all();
 
-    requestLock.lock();
-    requestProcessed.wait(requestLock, [this] {return _outputRequests == _parent.batchSize;});
-    return {totalEnergy / _parent.batchSize, totalPBad / _parent.batchSize};
+    requestsFinished.wait(requestLock);
+    if (_pBadTotal == 0) _pBadTotal = 1;
+    return {totalEnergy / _parent.batchSize, totalPBad / _pBadTotal};
 }
 
 void SANAThree::CalculatorHandler::_mainLoop() {
     // See comment about unique_locks in submitRequest
     unique_lock<mutex> requestLock (_requestSystem);
 
-    while (_calculatorsOn) {
-        startBatch.wait(requestLock, [this] {return _inputRequests < _parent.batchSize || !_calculatorsOn;});
-        if (!_calculatorsOn) {
-            requestLock.unlock();
-            return;
-        }
+    bool on; // To prevent double accessing this variable when unnecessary. We want compiler to cache it in certain scenarios
+    startBatch.wait(requestLock, [this, &on]{
+        on = _calculatorsOn;
+        return _inputRequests < _parent.batchSize || !on;
+    });
+    while (on) {
         changeRequest currentRequest = _parent.chooseNextRequest();
         _inputRequests++;
         requestLock.unlock();
@@ -116,19 +120,121 @@ void SANAThree::CalculatorHandler::_mainLoop() {
         const double pBad = acceptingProbability(currentRequest.energyInc, temperature);
         requestLock.lock();
         _parent.implementLastRequest(pBad, currentRequest);
-        totalPBad += pBad;
+        if (currentRequest.energyInc < 0) {
+            totalPBad += pBad;
+            _pBadTotal++;
+        }
         totalEnergy += _parent.currentScore;
         _outputRequests++;
-        requestLock.unlock();
-        requestProcessed.notify_one();
-        requestLock.lock();
+        on = _calculatorsOn;
+        if (_inputRequests >= _parent.batchSize and on) {
+            if (_outputRequests >= _parent.batchSize) requestsFinished.notify_one();
+            startBatch.wait(requestLock);
+            on = _calculatorsOn;
+        }
     }
+}
+
+static inline double aligEdgesIncMoveOp(uint peg, uint oldHole, uint newHole, Alignment &alignment, const Graph *G1, const Graph *G2, unsigned denominator) {
+    int res = 0;
+    if (G1->hasSelfLoop(peg)) {
+        if (G2->hasSelfLoop(oldHole))
+            res-=G2->getEdgeWeight(oldHole, oldHole);
+        if (G2->hasSelfLoop(newHole))
+            res+=G2->getEdgeWeight(newHole, newHole);
+    }
+    for (uint nbrPeg : *G1->getAdjList(peg)) if (nbrPeg != peg) {
+        const unsigned nbrHole = alignment[nbrPeg];
+        const int def = G2->getEdgeWeight(oldHole, nbrHole);
+        res -= def;
+        const int sur = G2->getEdgeWeight(newHole, nbrHole);
+        res += sur;
+    }
+    if(G1->directed)
+        for (uint nbrPeg : *G1->getInjList(peg)) if (nbrPeg != peg) {
+            const unsigned nbrHole = alignment[nbrPeg];
+            const int def = G2->getEdgeWeight(nbrHole, oldHole);
+            res -= def;
+            const int sur = G2->getEdgeWeight(nbrHole, newHole);
+            res += sur;
+    }
+    return static_cast<double>(res) / denominator;
+}
+
+static inline double aligEdgesIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2, Alignment &alignment, const Graph *G1, const Graph *G2, unsigned denominator) {
+    int result = 0;
+
+    // TODO: weight check
+
+    /*
+     * Marcus compiler optimizations for multithreading:
+     * Do NOT call alignment[] for the same index twice in a row. You might believe "oh, the compiler will just optimize
+     * it away, its no biggy!" NO, IT WILL NOT, because the alignment can vary while this calculation is ongoing. So the
+     * compiler is going to believe it has to fetch the value again in case it has changed. Now, we don't actually care
+     * if it has changed, but the compiler has no way to know that unless we tell it by manually specifying that YES,
+     * we want to use the same value twice, code transparency be damned.
+     */
+
+    // Peg 1 changes
+    if (G1->hasSelfLoop(peg1)) {
+        if (G2->hasSelfLoop(hole1))
+            result-=G2->getEdgeWeight(hole1, hole1);
+        if (G2->hasSelfLoop(hole2))
+            result+=G2->getEdgeWeight(hole2, hole2);
+    }
+    for (const uint nbrPeg : *G1->getAdjList(peg1)) if (nbrPeg != peg1) {
+        const unsigned nbrHole = alignment[nbrPeg];
+        const int def = G2->getEdgeWeight(hole1, nbrHole);
+        result -= def;
+        const int sur = G2->getEdgeWeight(hole2, nbrHole);
+        result += sur;
+    }
+    // Peg 2 changes
+    if (G1->hasSelfLoop(peg2)) {
+        if (G2->hasSelfLoop(hole2))
+            result-=G2->getEdgeWeight(hole2, hole2);
+        if (G2->hasSelfLoop(hole1))
+            result+=G2->getEdgeWeight(hole1, hole1);
+    }
+    for (const uint nbrPeg : *G1->getAdjList(peg2)) if (nbrPeg != peg2) {
+        const unsigned nbrHole = alignment[nbrPeg];
+        const int deficit = G2->getEdgeWeight(hole2, nbrHole);
+        result -= deficit;
+        const int sur = G2->getEdgeWeight(hole1, nbrHole);
+        result += sur;
+    }
+    // Fix for double counting
+    if (G1->hasEdge(peg1, peg2) and G2->hasEdge(hole1, hole2))
+        result += 2;
+
+    // Same thing again, but backwards
+    if(G1->directed) {
+        for (const uint nbrPeg : *G1->getInjList(peg1)) if (nbrPeg != peg1) {
+            const unsigned nbrHole = alignment[nbrPeg];
+            const int def = G2->getEdgeWeight(nbrHole, hole1);
+            result -= def;
+            const int sur = G2->getEdgeWeight(nbrHole, hole2);
+            result += sur;
+        }
+        for (const uint nbrPeg : *G1->getInjList(peg2)) if (nbrPeg != peg2) {
+            const unsigned nbrHole = alignment[nbrPeg];
+            const int deficit = G2->getEdgeWeight(nbrHole, hole2);
+            result -= deficit;
+            const int sur = G2->getEdgeWeight(nbrHole, hole1);
+            result += sur;
+        }
+        if (G1->hasEdge(peg2, peg1) and G2->hasEdge(hole2, hole1))
+            result += 2;
+    }
+
+    return static_cast<double>(result) / denominator;
 }
 
 void SANAThree::CalculatorHandler::_assessMove(changeRequest &input) const {
     // This is a hack, MC should be providing this information, not SANA!!
     if (_parent.needEC) {
-        input.energyInc = EdgeCorrectness::getIncChangeOp(input.peg1, input.hole1, input.hole2, _parent.alignment)
+        input.energyInc = aligEdgesIncMoveOp(input.peg1, input.hole1, input.hole2,
+                                            _parent.alignment, _parent.G1, _parent.G2, _parent.m1)
                           * _parent.MC->getWeight("ec");
     }
     if (_parent.needEM) {
@@ -144,7 +250,8 @@ void SANAThree::CalculatorHandler::_assessMove(changeRequest &input) const {
 void SANAThree::CalculatorHandler::_assessSwap(changeRequest &input) const {
     // This is a hack, MC should be providing this information, not SANA!!
     if (_parent.needEC) {
-        input.energyInc = EdgeCorrectness::getIncSwapOp(input.peg1, input.peg2, input.hole1, input.hole2, _parent.alignment)
+        input.energyInc = aligEdgesIncSwapOp(input.peg1, input.peg2, input.hole1, input.hole2,
+                                            _parent.alignment, _parent.G1, _parent.G2, _parent.m1)
                           * _parent.MC->getWeight("ec");
     }
     if (_parent.needEM) {
@@ -156,3 +263,5 @@ void SANAThree::CalculatorHandler::_assessSwap(changeRequest &input) const {
                            * _parent.MC->getWeight("er");
     }
 }
+
+

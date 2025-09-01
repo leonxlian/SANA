@@ -26,20 +26,19 @@ endif
 
 
 ifeq ($(LEGACY), 1)
-    $(info LEGACY is: $(LEGACY))
     $(info Legacy build detected.)
-    ifdef THREADS
+ifdef THREADS
 	$(error Multithreading is not supported for legacy SANA.)
-    endif
+endif
     CXXFLAGS := $(CXXFLAGS) -DLEGACY
     MAIN := $(MAIN).legacy
 else
-    ifdef THREADS # this is the number of calculator threads
+ifdef THREADS # this is the number of calculator threads
 	CXXFLAGS := $(CXXFLAGS) "-DTHREADS=$(THREADS)"
 	MAIN := $(MAIN).threads
-    else
+else
 	MAIN := $(MAIN)
-    endif
+endif
 endif
 
 ifeq ($(STATIC), 1)
@@ -47,11 +46,17 @@ ifeq ($(STATIC), 1)
     MAIN := $(MAIN).static
 endif
 
-ifeq ($(GDB), 1) # this one should be second-last since the debugging ones run slowly and should be used on smallish networks.
+# this one should be second-last since the debugging ones run slowly and should be used on smallish networks.
+ifeq ($(GDB), 2) # For profiling
+    CXXFLAGS := $(CXXFLAGS) -g -O3 -fno-omit-frame-pointer
+    MAIN := $(MAIN).o3.gdb
+else
+ifeq ($(GDB), 1) # For debugging
     CXXFLAGS := $(CXXFLAGS) -g -O0
     MAIN := $(MAIN).gdb
 else
-    CXXFLAGS := $(CXXFLAGS) -O3 -flto # always turn on optimization if not debugging, ftlo is linktime optimization
+    CXXFLAGS := $(CXXFLAGS) -O3 # always turn on optimization if not debugging
+endif
 endif
 
 ifeq ($(CORES), 1) # CORES should be listed last to ensure it's used on the smallest networks during regression tests.
