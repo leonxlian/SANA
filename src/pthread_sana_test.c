@@ -20,6 +20,8 @@ static unsigned RandInt(unsigned n) { return n * drand_r(); }
 
 static int RandElement(void) { return RandInt(A_SIZE); }
 
+typedef struct _td {unsigned collisions, iters;} THREAD_DATA;
+
 // Thread function to calculate partial sums--returns number of failed attempts
 int FindAndLockPair(int *pi1, int *pi2) {
     int tries=0;
@@ -48,37 +50,48 @@ int PretendMove() {
 // returns total failed locks
 void *OneThread(void *v) {
     unsigned fails=0, oldfails;
+    THREAD_DATA *T = (THREAD_DATA*)v;
     while(!STOP) {
 	oldfails=fails;
 	fails+=PretendMove(); 
 	assert(fails >= oldfails); // detect overflow
+	T->iters++;
     }
-    return v;
+    T->collisions = fails;
+    return (void*)T;
 }
 
 void RunThreads(unsigned seconds) {
     int i;
     pthread_t threads[NUM_THREADS];
+    unsigned fails[NUM_THREADS];
 
     // Initialize mutex array
     for(i=0; i<A_SIZE; i++) pthread_mutex_init(&mutex[i], NULL);
 
+    THREAD_DATA *TD;
+    TD = calloc(NUM_THREADS, sizeof(*TD));
+
     // Create threads
     for (unsigned t = 0; t < NUM_THREADS; t++)
-        pthread_create(&threads[t], NULL, OneThread, NULL);
+        pthread_create(&threads[t], NULL, OneThread, &TD[t]);
 
     usleep(seconds*1000000);
     STOP=1;
 
+    unsigned totalCollisions=0, totalIters=0;
     // Wait for all threads to complete
     for (unsigned t = 0; t < NUM_THREADS; t++) {
         pthread_join(threads[t], NULL);
+	totalCollisions += TD[t].collisions;
+	totalIters += TD[t].iters;
     }
 
-    // Destroy the mutex
-    for(i=0; i<A_SIZE; i++) pthread_mutex_destroy(&mutex[i]);
+    for(i=0; i<A_SIZE; i++) {
+	pthread_mutex_destroy(&mutex[i]);
+    }
 
-    printf("done\n");
+    printf("total collisions %u out of %u iterations\n", totalCollisions, totalIters);
 }
 
 int main(int argc, char *argv[]) {
