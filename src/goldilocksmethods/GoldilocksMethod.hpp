@@ -6,8 +6,7 @@
 #include <vector>
 #include <map>
 
-#include "../methods/wrappers/SanaWrapper.hpp"
-#include "../methods/SANA.hpp"
+#include "../methods/SANAThree.hpp"
 #include "../utils/NormalDistribution.hpp"
 
 using namespace std;
@@ -30,7 +29,7 @@ public:
 
     //single, static SANA for all goldilocks methods
     //call setSana before initializing any goldilocks method
-    static void setSana(SanaWrapper *const sana) { GoldilocksMethod::sana = &sana->legacy; }
+    static void setSana(SANAThree *const sana) { GoldilocksMethod::sana = sana; }
 
     GoldilocksMethod();
     virtual ~GoldilocksMethod() =default;
@@ -89,7 +88,7 @@ protected:
     virtual void vComputeTInitial(Resources maxRes);
     virtual void vComputeTFinal(Resources maxRes);
 
-    static SANATwo* sana;
+    static SANAThree* sana;
 
     double targetInitialPBad, targetFinalPBad;
     double errorTol;
@@ -126,7 +125,7 @@ private:
                                         bool fixLineHeights);
 
     //stuff for comparison for paper:
-    friend void goldilocksMethodComparison(SanaWrapper *const sana);
+    friend void goldilocksMethodComparison(SANAThree *const sana);
     friend NormalDistribution getPBadDis(double temp, int numSamples, double sampleTime);
 
     //union of the tempToPBad maps of all the methods

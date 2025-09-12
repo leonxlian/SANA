@@ -4,7 +4,7 @@ ARCH_FLAGS=$(shell ($(GCC) -v 2>&1; uname -a) | awk '/CYGWIN/{print "-U__STRICT_
 MY_CC = g++$(GCC_VER)
 CXXFLAGS = -I "src/utils" "-DLIBWAYNE=1" -Wall -std=gnu++11 -pthread $(ARCH_FLAGS) #-pg -fno-inline
 
-SANA_VER=3.0
+SANA_VER=3.2
 MAIN = sana$(SANA_VER)
 
 #you can give these on Make's command line, eg "SPARSE=1" or "WEIGHT=1" or "MULTI=1"
@@ -98,7 +98,6 @@ LFLAGS =
 LIBS =
 
 METHODS_SRC =   							\
-	src/methods/SANA.cpp    					\
 	src/methods/HillClimbing.cpp    				\
 	src/methods/Method.cpp  					\
 	src/methods/NoneMethod.cpp 					\
@@ -185,18 +184,14 @@ METHOD_WRAPPERS_SRC =    						\
 	src/methods/wrappers/WAVEWrapper.cpp				\
 	src/methods/wrappers/PINALOGWrapper.cpp				\
 	src/methods/wrappers/SANAPISWAPWrapper.cpp			\
-	src/methods/wrappers/CytoGEDEVOWrapper.cpp			\
-	src/methods/wrappers/SanaWrapper.cpp
+	src/methods/wrappers/CytoGEDEVOWrapper.cpp
 
 GOLDILOCKSMETHODS_SRC =   							\
-	src/goldilocksmethods/Ameur.cpp 					\
-	src/goldilocksmethods/IteratedAmeur.cpp    				\
 	src/goldilocksmethods/LinearRegressionModern.cpp  					\
 	src/goldilocksmethods/LinearRegressionVintage.cpp 					\
 	src/goldilocksmethods/PBadBinarySearch.cpp   				\
 	src/goldilocksmethods/GoldilocksMethod.cpp    					\
 	src/goldilocksmethods/goldilocksUtils.cpp 					\
-	src/goldilocksmethods/StatisticalTest.cpp  	\
 	src/goldilocksmethods/IteratedLinearRegression.cpp		
 
 MODES_SRC = 								\
