@@ -9,12 +9,15 @@
 #include <list>
 #include <limits>
 #include <queue>
+#include <set>
 
 #include "Method.hpp"
 #include "../measures/Measure.hpp"
 #include "../measures/MeasureCombination.hpp"
 #include "../measures/CoreScore.hpp"
 #include "../utils/Misc.hpp"
+#include "../utils/CircularBuffer.hpp"
+#include "../Graph.hpp"
 
 using namespace std;
 
@@ -41,13 +44,16 @@ public:
         long long maxIterations, double tolerance, bool addHillClimbing, const MeasureCombination* MC,
         const string& scoreAggrStr, const Alignment& optionalStartAlig, const string& outputFileName,
         const string& localScoresFileName, unsigned threadNumber);
-    ~SANAThree() override {}
+    ~SANAThree() override {delete threadPool;}
 
     Alignment run() override;
 
     // Compatibility functions, the intent is for this to get reworked - Marcus
     Alignment runUsingIterations();
     Alignment runUsingConfidenceIntervals();
+
+    double getEquilibriumPBadAtTemp(double temperature, unsigned timeoutSeconds) const;
+
     void describeParameters(ostream& stream) const override;
     string fileNameSuffix(const Alignment& A) const override;
 
@@ -56,6 +62,8 @@ public:
 
     //requires TInitial and TFinal to be already initialized
     void setTDecayFromTempRange() {tDecay = -log(tFinal/tInitial);}
+
+    unsigned pBadsInBuffer() const {return threadPool->pBadsInBuffer();}
 
 private:
 
@@ -68,8 +76,6 @@ private:
         const unsigned hole1;
         const unsigned hole2;
 
-        const unsigned peg1colorID;
-        const unsigned peg2colorID;
         const unsigned hole2unassignedID;
 
         const unsigned color;
@@ -78,10 +84,8 @@ private:
         double energyInc;
 
         changeRequest(bool two_pegs, unsigned peg1, unsigned peg2, unsigned hole1, unsigned hole2,
-        unsigned peg1colorID, unsigned peg2colorID, unsigned hole2unassignedID,
-        unsigned colorID, double energyInc):
-            twoPegs(two_pegs), peg1(peg1), peg2(peg2), hole1(hole1), hole2(hole2),
-            peg1colorID(peg1colorID), peg2colorID(peg2colorID), hole2unassignedID(hole2unassignedID),
+        unsigned hole2unassignedID, unsigned colorID, double energyInc):
+            twoPegs(two_pegs), peg1(peg1), peg2(peg2), hole1(hole1), hole2(hole2), hole2unassignedID(hole2unassignedID),
             color(colorID) {
             this->energyInc = energyInc;
         }
@@ -102,32 +106,49 @@ private:
         // is deconstructed. Therefore, it should only ever exist as a local object at the smallest
         // possible scope to ensure that the computer threads are not being hogged by a greedy SANA.
         // -Marcus
-        CalculatorHandler(unsigned threadNumber, SANAThree &SANA);
+        CalculatorHandler(unsigned threadNumber, SANAThree &SANA, unsigned long long bufferSize);
         ~CalculatorHandler();
 
-        // These are the proper getters and setters for CalculatorHandler. Please use this, minding
-        // the below comment.
+        // This is the proper way to interface with collectBatch
         // -Marcus
         batchOutput collectBatch(double temperature);
 
-    private:
-        bool _calculatorsOn;
+        double runUntilEquilibrium(double temperature, unsigned timeoutSeconds);
 
-        condition_variable requestsFinished;
-        condition_variable startBatch;
-        const unsigned _extraThreads;
+        double recentPBadQuick() const {return pBadBuffer.quickAverage();}
+
+        double recentPBadTrue() {return pBadBuffer.accurateAverage();}
+
+        unsigned pBadsInBuffer() const {return pBadBuffer.size();}
+
+        void resetBuffers() {pBadBuffer.resetBuffer(); scoreBuffer.resetBuffer();}
+
+    private:
+        bool calculatorsOn;
+        bool collectBatches;
+        const unsigned daughterNum;
 
         double temperature;
         double totalEnergy;
         double totalPBad;
 
-        unsigned long long _inputRequests;
-        unsigned long long _outputRequests;
-        unsigned long long _pBadTotal;
+        uint64_t inputRequests;
+        uint64_t outputRequests;
+        uint64_t pBadTotal;
 
-        SANAThree &_parent;
-        mutex _requestSystem;
-        vector<thread> _threadVector;
+        SANAThree &parent;
+
+        mutex requestMutex;
+        mutex bufferMutex;
+
+        condition_variable requestsFinished;
+        condition_variable equilibriumCheck;
+        condition_variable startBatch;
+
+        CircularBuffer<double> scoreBuffer;
+        CircularBuffer<double> pBadBuffer;
+
+        vector<thread> threadVector;
         void _mainLoop();
         void _assessChange(changeRequest& currentRequest) const {
             if (currentRequest.twoPegs) _assessSwap(currentRequest);
@@ -136,6 +157,9 @@ private:
         void _assessMove(changeRequest &input) const; // One pin
         void _assessSwap(changeRequest &input) const; // Two pins
     };
+
+    // Convenience variables
+    const uint64_t n1, n2, m1, m2;
 
     // Control variables, keep constant -Marcus
     const bool hillClimbing, needEC, needEM, needER;
@@ -149,12 +173,11 @@ private:
     const string outputFileName;
     const string localScoresFileName;
 
-    // Convenience variables
-    const unsigned n1, n2, m1, m2;
-
     double tInitial;
-    double tFinal;
+    double tFinal{};
     double tDecay;
+
+    CalculatorHandler *threadPool;
 
     // Set-up function
     void initDataStructures();
@@ -162,11 +185,13 @@ private:
     // Main run function and variables
     Alignment alignment;
     double currentScore;
-    uint64_t totalMovesPerformed;
-    uint64_t totalSwapsPerformed;
-    void runIterations(CalculatorHandler &threadPool);
-    void runConfidenceIntervals(CalculatorHandler &threadPool);
-    void runHillClimbing(CalculatorHandler &threadPool);
+    uint64_t totalMovesCalculated;
+    uint64_t totalMovesAccepted;
+    uint64_t totalSwapsCalculated;
+    uint64_t totalSwapsAccepted;
+    void runIterations();
+    void runConfidenceIntervals();
+    void runHillClimbing();
 
     void scramble();
 
@@ -174,27 +199,20 @@ private:
 
     mt19937_64 generator; // rng
     uniform_real_distribution<> randomReal;
-
     vector<vector<unsigned>> colorUnassignedNodes;
-
     // Keeps track of the total number of alignments, swaps, and moves we have access to as changes
     uint64_t numAdjacentAlignments;
     uint64_t numSwaps;
     vector<uint64_t> swapsPerColor;
     vector<uint64_t> movesPerColor;
 
-    // Keeps track of how many unlocked pegs and unassigned holes per colorID that we have access to
-    vector<unsigned> pegsPerColor;
-    vector<unsigned> unassignedHolesPerColor;
-
-    // Keeps track of which pegs and holes we have locked (if we have threads) per color:
-    vector<set<unsigned>> lockedPegs;
-    vector<set<unsigned>> lockedHoles;
+    mutex checkHoleLock;
+    vector<bool> holeLocks;
 
     changeRequest chooseNextRequest();
     void implementLastRequest(double pBad, const changeRequest &input);
 
-    // Luxury functions
+    // TRACKING SYSTEM
     void trackProgress(long long unsigned iter, double fractionTime, double elapsedTime,
         double temperature, double lastAvgPBad, unsigned batches = 0, double batchScore = 0., double batchPbad = 0.) const;
     static void setInterruptSignal(); // Control+C during execution offers options

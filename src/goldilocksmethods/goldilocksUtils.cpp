@@ -7,9 +7,6 @@
 #include "LinearRegressionVintage.hpp"
 #include "LinearRegressionModern.hpp"
 #include "PBadBinarySearch.hpp"
-#include "Ameur.hpp"
-#include "IteratedAmeur.hpp"
-#include "StatisticalTest.hpp"
 #include "IteratedLinearRegression.hpp"
 
 using namespace std;
@@ -21,18 +18,12 @@ unique_ptr<GoldilocksMethod> getGoldilocksMethod(string name) {
         return unique_ptr<LinearRegressionModern>(new LinearRegressionModern());
     if (name == PBadBinarySearch::NAME)        
         return unique_ptr<PBadBinarySearch>(new PBadBinarySearch());
-    if (name == Ameur::NAME)                   
-        return unique_ptr<Ameur>(new Ameur());
-    if (name == IteratedAmeur::NAME)           
-        return unique_ptr<IteratedAmeur>(new IteratedAmeur());
-    if (name == StatisticalTest::NAME)         
-        return unique_ptr<StatisticalTest>(new StatisticalTest());
     if (name == IteratedLinearRegression::NAME)
         return unique_ptr<IteratedLinearRegression>(new IteratedLinearRegression());
     throw runtime_error("goldilocks method "+name+" not found");
 }
 
-void goldilocksMethodComparison(SanaWrapper *const sana) {
+void goldilocksMethodComparison(SANAThree *const sana) {
 
     //customizable parameters
     GoldilocksExpParams params;
@@ -41,9 +32,6 @@ void goldilocksMethodComparison(SanaWrapper *const sana) {
         LinearRegressionVintage::NAME, 
         LinearRegressionModern::NAME,
         PBadBinarySearch::NAME,
-        Ameur::NAME,
-        IteratedAmeur::NAME,
-        StatisticalTest::NAME
     };
     params.targetInitialPBad = 0.99;
     params.targetFinalPBad = 1e-10;
