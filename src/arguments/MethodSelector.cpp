@@ -43,6 +43,9 @@ Method* MethodSelector::initMethod(const Graph& G1, const Graph& G2, ArgumentPar
                          or args.strings["-fcolor2"] != ""))
         cerr <<"Warning: only sana takes colors into consideration" << endl;
 
+    if (name != "sana" and args.strings["-allowedPartners"] != "")
+        cerr <<"Warning: only sana takes allowedPartners into consideration" << endl;
+
     if (name == "sana")        return static_cast<Method*>(initSANA(G1, G2, args, M, startAligName));
     if (name == "hc")          return new HillClimbing(&G1, &G2, &M, startAligName);
     if (name == "random")      return new RandomAligner(&G1, &G2);
@@ -110,12 +113,14 @@ SANAThree* MethodSelector::initSANA(const Graph& G1, const Graph& G2,
     string TIniArg = args.strings["-tinitial"];
     string TDecayArg = args.strings["-tdecay"];
     string goldilocksMethodName = args.strings["-goldilocksmethod"];
+    string allowedPartnersName = args.strings["-allowedPartners"];
 
     //this is a special argument value that does a comparison between all temperature goldilocks methods
     //made for the purpose of running the experiments for the paper on the tempertaure goldilocks
     if (goldilocksMethodName == "comparison") {
         Alignment startAlig;
         if (startAligName != "") startAlig = Alignment::loadEdgeList(G1, G2, startAligName);
+        if (allowedPartnersName != "") startAlig.loadAllowedPartners(G1, G2, allowedPartnersName);
         SANAThree sana(&G1, &G2, 0.0, 0.0, 0, 0, 0.0, 0, &M,
                   args.strings["-combinedScoreAs"], startAlig, "", "", args.doubles["-maxthreads"]);
         goldilocksMethodComparison(&sana);
@@ -154,6 +159,7 @@ SANAThree* MethodSelector::initSANA(const Graph& G1, const Graph& G2,
 
     Alignment startAlig;
     if (startAligName != "") startAlig = Alignment::loadEdgeList(G1, G2, startAligName);
+    if (allowedPartnersName != "") startAlig.loadAllowedPartners(G1, G2, allowedPartnersName);
 
     SANAThree* sana = new SANAThree(&G1, &G2, TInitial, TDecay, maxSeconds, maxIterations, tolerance,
         args.bools["-add-hill-climbing"], &M, args.strings["-combinedScoreAs"],
