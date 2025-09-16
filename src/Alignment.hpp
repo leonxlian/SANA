@@ -34,6 +34,8 @@ public:
     static Alignment loadMapping(const string& fileName);
     static Alignment randomColorRestrictedAlignment(const Graph& G1, const Graph& G2);
     
+    unordered_map<string, unordered_set<string>> loadAllowedPartners(const Graph& G1, const Graph& G2, const string& fileName);
+
     //returns a random alignment from a graph with n1 nodes to a graph with nodes n2 >= n1 nodes
     static Alignment random(uint n1, uint n2);
     static Alignment empty();
@@ -71,6 +73,9 @@ public:
 
 private:
     vector<atomic_uint> A;
+    // allowedPartners should basically be a set of entries of the form <string G1nodeName, set of G2 node names>
+    // any node not listed is allowed to align anywhere
+    unordered_map<string, unordered_set<string>> allowedPartners;
 };
 
 #endif /* ALIGNMENT_HPP */

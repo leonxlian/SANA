@@ -144,6 +144,37 @@ Alignment Alignment::loadMapping(const string& fileName) {
     return A;
 }
 
+// Function to read a line from an input stream and split it into words.
+static std::vector<std::string> lineToWords(const std::string& line) {
+    std::vector<std::string> words;
+    std::stringstream ss(line);
+    std::string word;
+    while (ss >> word) {
+	words.push_back(word);
+    }
+    return words;
+}
+
+unordered_map<string, unordered_set<string>> Alignment::loadAllowedPartners(const Graph& G1, const Graph& G2, const string& fileName) {
+    if (not FileIO::fileExists(fileName)) {
+        throw runtime_error("Starting alignment file "+fileName+" not found");
+    }
+    ifstream ifs(fileName);
+    string line;
+    while(FileIO::safeGetLine(ifs, line)) {
+	std::vector<std::string> words = lineToWords(line);
+	assert(words.size() >= 2);
+        assert(G1.hasNodeName(words[0]));
+	unordered_set<string> partners;
+	for (size_t i = 1; i < words.size(); ++i) {
+            assert(G2.hasNodeName(words[i]));
+	    partners.insert(words[i]);
+	}
+	allowedPartners[words[0]] = partners;
+    }
+    return allowedPartners;
+}
+
 Alignment Alignment::random(uint n1, uint n2) {
     //taken from: http://stackoverflow.com/questions/311703/algorithm-for-sampling-without-replacement
     vector<uint> alignment(n1);
