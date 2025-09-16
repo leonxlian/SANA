@@ -26,14 +26,9 @@
 #include "../goldilocksmethods/GoldilocksMethod.hpp"
 #include "../goldilocksmethods/goldilocksUtils.hpp"
 #include "../goldilocksmethods/LinearRegressionVintage.hpp"
+#include <unistd.h>
 
 using namespace std;
-
-#ifdef THREADS
-#define THREAD_NUMBER atoi(getenv("SANA_THREADS"))
-#else
-#define THREAD_NUMBER 1
-#endif
 
 Method* MethodSelector::initMethod(const Graph& G1, const Graph& G2, ArgumentParser& args, MeasureCombination& M) {
     string aligFile = args.strings["-eval"];
@@ -86,22 +81,27 @@ void MethodSelector::validateRunTimeSpec(ArgumentParser& args) {
     double ts = args.doubles["-ts"], tm = args.doubles["-tm"], t = args.doubles["-t"],
            it = args.doubles["-it"], itk = args.doubles["-itk"],
            itm = args.doubles["-itm"], itb = args.doubles["-itb"],
-           tol = args.doubles["-tolerance"];
+           tolerance = args.doubles["-tolerance"], threads = args.doubles["-maxthreads"];
 
-    if(tol>0) {
+    if(tolerance>0) {
 	char *s_tol = getenv("SANA_TOLERANCE");
 	if(s_tol) {
-	    cerr << "WARNING: forcibly replacing tolerance "<<tol<<" with SANA_TOLERANCE (string "<<s_tol<<", double ";
-	    tol = args.doubles["-tolerance"] = stod(s_tol);
-	    cerr << tol << ")" << endl;
+	    cerr << "WARNING: forcibly replacing tolerance "<<tolerance<<" with SANA_TOLERANCE (string "<<s_tol<<", double ";
+	    tolerance = args.doubles["-tolerance"] = stod(s_tol);
+	    cerr << tolerance << ")" << endl;
 	}
     }
-    uint execLimitArgCount = (t>0)+(ts>0)+(tm>0)+(it>0)+(itk>0)+(itm>0)+(itb>0)+(tol>0);
+    uint execLimitArgCount = (t>0)+(ts>0)+(tm>0)+(it>0)+(itk>0)+(itm>0)+(itb>0)+(tolerance>0);
     if (execLimitArgCount != 1) {
-	if(tol)
+	if(tolerance)
 	    throw runtime_error("\nIt looks like you have specified an explicit run time or iteration count without setting tolerance to zero\nthis is NOT recommended. You MUST explicitly set tolerance to zero using \"-tolerance 0\" for this to work");
 	else
 	    throw runtime_error("exactly one of '-tolerance', '-t', -ts', '-tm', '-it', '-itk', '-itm', '-itb' must be >0");
+    }
+    int hardwareCPUs = sysconf(_SC_NPROCESSORS_ONLN);
+    if(threads > hardwareCPUs) {
+	cerr << "WARNING: setting maxthreads to hardware limit of " << hardwareCPUs << " rather than " << threads << '\n';
+	threads = args.doubles["-maxthreads"] = hardwareCPUs;
     }
 }
 
@@ -117,7 +117,7 @@ SANAThree* MethodSelector::initSANA(const Graph& G1, const Graph& G2,
         Alignment startAlig;
         if (startAligName != "") startAlig = Alignment::loadEdgeList(G1, G2, startAligName);
         SANAThree sana(&G1, &G2, 0.0, 0.0, 0, 0, 0.0, 0, &M,
-                  args.strings["-combinedScoreAs"], startAlig, "", "", THREAD_NUMBER);
+                  args.strings["-combinedScoreAs"], startAlig, "", "", args.doubles["-maxthreads"]);
         goldilocksMethodComparison(&sana);
         exit(0);
     }
@@ -157,7 +157,7 @@ SANAThree* MethodSelector::initSANA(const Graph& G1, const Graph& G2,
 
     SANAThree* sana = new SANAThree(&G1, &G2, TInitial, TDecay, maxSeconds, maxIterations, tolerance,
         args.bools["-add-hill-climbing"], &M, args.strings["-combinedScoreAs"],
-        startAlig, args.strings["-o"], args.strings["-localScoresFile"], THREAD_NUMBER);
+        startAlig, args.strings["-o"], args.strings["-localScoresFile"], args.doubles["-maxthreads"]);
 
     if (useMethodForTIni or useMethodForTDecay) {
         if (goldilocksMethodName == "auto" ) { //if user uses 'auto', choose for them

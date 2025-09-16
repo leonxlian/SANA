@@ -52,6 +52,8 @@ SANAThree::BatchHarvester::BatchHarvester(const unsigned threadNumber, SANAThree
 
     mt19937_64 generator(random_device{}());
 
+    cerr << "BatchHarvester is using " << threadNumber << " threads\n";
+
     if (threadNumber == 0) throw runtime_error("Thread number must be > 0");
     threadVector.reserve(threadNumber);
     stateLock.lock();
