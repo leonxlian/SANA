@@ -86,7 +86,8 @@ private:
     vector<atomic_uint> A;
     // allowedPeg2Hole should basically be a set of entries of the form <G1node, set of G2 nodes>
     // allowedHole2Peg is the inverse. Any node not listed is allowed to align anywhere
-    unordered_map<uint, unordered_set<uint>> allowedPeg2Hole, allowedHole2Peg;
+    // NOTE: these are both GLOBAL to the Alignment class
+    static unordered_map<uint, unordered_set<uint>> allowedPeg2Hole, allowedHole2Peg;
 };
 
 #endif /* ALIGNMENT_HPP */

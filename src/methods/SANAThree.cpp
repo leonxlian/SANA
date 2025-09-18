@@ -151,8 +151,8 @@ Alignment SANAThree::runUsingConfidenceIntervals() {
 void SANAThree::initDataStructures() {
     auto assignedNodesG2 = vector<char> (n2);
 
-    if (startingAlignment.size() != 0) alignment = startingAlignment;
-    else alignment = Alignment::randomColorRestrictedAlignment(*G1, *G2);
+    if (startingAlignment.size() == 0) alignment = Alignment::randomColorRestrictedAlignment(*G1, *G2);
+    else alignment = startingAlignment;
 
     //init holeToColorID. For each node, we do the following transformations:
     //g2Node -> g2ColorId -> g1ColorId -> actColId
@@ -458,7 +458,7 @@ SANAThree::changeRequest SANAThree::allowedPartnersRequest(mt19937_64 &generator
 	} while(alignment.isHappyHole(hole2)); // isHappyHole is false if the hole is empty
 	peg2 = alignment.whichPeg(hole2); // can be (-1)
 
-	if(alignment.allowedPegs(hole2).size() == 0) // if no partners exist, pick a UNHAPPY random peg
+	if(alignment.allowedPegs(hole2).size() == 0) // if no partners exist, pick a random UNHAPPY peg
 	    do peg1 = G1->getNumNodes() * randomReal(generator);
 	    while(alignment.isHappyPeg(peg1));
 	else {
@@ -476,10 +476,13 @@ SANAThree::changeRequest SANAThree::allowedPartnersRequest(mt19937_64 &generator
 		peg1 = *it;
 	    }
 	}
+	assert(peg1 < G1->getNumNodes());
 	hole1 = alignment[peg1];
 	if(peg2 == (uint)(-1)) {
 	    twoPegs = false;
-	    hole2unassignedID = hole1; //alignmentNumber % numUnassignedHoles; // Marcus: this is the part I don't know how to handle
+            const unsigned numUnassignedHoles = colorUnassignedNodes.at(color).size();
+	    hole2unassignedID = (hole1+hole2) % numUnassignedHoles;
+	    colorUnassignedNodes[color][hole2unassignedID] = hole2;
 	} else
 	    twoPegs = true;
 	if (holeLocks[hole1] || holeLocks[hole2]) {

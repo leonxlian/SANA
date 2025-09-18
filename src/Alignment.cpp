@@ -4,6 +4,9 @@
 #include "utils/FileIO.hpp"
 using namespace std;
 
+// WARNING: the allowed list is GLOBAL to the Alignment class
+unordered_map<uint, unordered_set<uint>> Alignment::allowedPeg2Hole, Alignment::allowedHole2Peg;
+
 Alignment::Alignment() = default;
 Alignment::Alignment(const vector<uint>& mapping) {
     vector<atomic_uint> align(mapping.size());
@@ -182,6 +185,7 @@ void Alignment::loadAllowedPartners(const Graph& G1, const Graph& G2, const stri
 	}
 	allowedPeg2Hole[peg] = partners;
     }
+    cout << "loaded " << allowedPeg2Hole.size() << " allowed pegs and " << allowedHole2Peg.size() << " holes.\n";
 }
 
 uint Alignment::whichPeg(uint hole) { for(const auto& peg : A) if(A[peg]==hole) return peg; return -1; }
