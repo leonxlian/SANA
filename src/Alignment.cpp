@@ -155,25 +155,36 @@ static std::vector<std::string> lineToWords(const std::string& line) {
     return words;
 }
 
-unordered_map<string, unordered_set<string>> Alignment::loadAllowedPartners(const Graph& G1, const Graph& G2, const string& fileName) {
+void Alignment::loadAllowedPartners(const Graph& G1, const Graph& G2, const string& fileName) {
     if (not FileIO::fileExists(fileName)) {
         throw runtime_error("Starting alignment file "+fileName+" not found");
     }
+    cout << "loading allowed partners from file " << fileName << '\n';
     ifstream ifs(fileName);
     string line;
     while(FileIO::safeGetLine(ifs, line)) {
 	std::vector<std::string> words = lineToWords(line);
 	assert(words.size() >= 2);
-        assert(G1.hasNodeName(words[0]));
-	unordered_set<string> partners;
-	for (size_t i = 1; i < words.size(); ++i) {
-            assert(G2.hasNodeName(words[i]));
-	    partners.insert(words[i]);
+        if(!G1.hasNodeName(words[0])) {
+	    cerr << "WARNING: can't load allowedPartners for non-existant G1 node " << words[0] << '\n';
+	    continue;
 	}
-	allowedPartners[words[0]] = partners;
+	uint peg = G1.getNameIndex(words[0]);
+	unordered_set<uint> partners;
+	for (size_t i = 1; i < words.size(); ++i) {
+            if(!G2.hasNodeName(words[i])) {
+		cerr << "WARNING: can't load non-existant allowedPartner G2 node " << words[i] << '\n';
+		continue;
+	    }
+	    uint hole = G2.getNameIndex(words[i]);
+	    partners.insert(hole);
+	    allowedHole2Peg[hole].insert(peg);
+	}
+	allowedPeg2Hole[peg] = partners;
     }
-    return allowedPartners;
 }
+
+uint Alignment::whichPeg(uint hole) { for(const auto& peg : A) if(A[peg]==hole) return peg; return -1; }
 
 Alignment Alignment::random(uint n1, uint n2) {
     //taken from: http://stackoverflow.com/questions/311703/algorithm-for-sampling-without-replacement

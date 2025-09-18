@@ -43,8 +43,12 @@ Method* MethodSelector::initMethod(const Graph& G1, const Graph& G2, ArgumentPar
                          or args.strings["-fcolor2"] != ""))
         cerr <<"Warning: only sana takes colors into consideration" << endl;
 
-    if (name != "sana" and args.strings["-allowedPartners"] != "")
-        cerr <<"Warning: only sana takes allowedPartners into consideration" << endl;
+    if (args.strings["-allowedPartners"] != "") {
+	if (name != "sana")
+	    cerr <<"Warning: only sana takes allowedPartners into consideration" << endl;
+	if (args.strings["-fcolor1"] != "" or args.strings["-fcolor2"] != "")
+	    throw runtime_error("allowedPartners is not compatible with node colors");
+    }
 
     if (name == "sana")        return static_cast<Method*>(initSANA(G1, G2, args, M, startAligName));
     if (name == "hc")          return new HillClimbing(&G1, &G2, &M, startAligName);

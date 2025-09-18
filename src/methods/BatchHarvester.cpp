@@ -105,7 +105,7 @@ double SANAThree::BatchHarvester::runUntilEquilibrium(double temperature, unsign
     daughtersPaused = 0;
     pausedCondition.notify_all();
     const auto originalTime = chrono::steady_clock::now();
-    if (!handlerCondition.wait_for(stateLock, chrono::seconds(timeoutSeconds), [this]{return daughtersPaused == daughterNum;})) {
+    if(!handlerCondition.wait_for(stateLock, chrono::seconds(timeoutSeconds), [this]{return daughtersPaused==daughterNum;})) {
         // Clean up for an early wake.
         duration = chrono::steady_clock::now() - originalTime;
         timedOut = true;

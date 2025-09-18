@@ -48,19 +48,19 @@ endif
 
 # this one should be second-last since the debugging ones run slowly and should be used on smallish networks.
 ifeq ($(GDB), 4)
-    CXXFLAGS := $(CXXFLAGS) -g -O3 -fno-omit-frame-pointer -fsanitize=thread
+    CXXFLAGS := $(CXXFLAGS) -ggdb -O3 -fno-omit-frame-pointer -fsanitize=thread
     MAIN := $(MAIN).sanitize.o3.gdb
 else
 ifeq ($(GDB), 3)
-    CXXFLAGS := $(CXXFLAGS) -g -O0 -fno-omit-frame-pointer -fsanitize=thread
+    CXXFLAGS := $(CXXFLAGS) -ggdb -O0 -fno-omit-frame-pointer -fsanitize=thread
     MAIN := $(MAIN).sanitize.gdb
 else
 ifeq ($(GDB), 2) # For profiling
-    CXXFLAGS := $(CXXFLAGS) -g -O3 -fno-omit-frame-pointer
+    CXXFLAGS := $(CXXFLAGS) -ggdb -O3 -fno-omit-frame-pointer
     MAIN := $(MAIN).o3.gdb
 else
 ifeq ($(GDB), 1) # For debugging
-    CXXFLAGS := $(CXXFLAGS) -g -O0 -fno-omit-frame-pointer
+    CXXFLAGS := $(CXXFLAGS) -ggdb -O0 -fno-omit-frame-pointer
     MAIN := $(MAIN).gdb
 else
     CXXFLAGS := $(CXXFLAGS) -O3 # always turn on optimization if not debugging

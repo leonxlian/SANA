@@ -278,7 +278,7 @@ void SANAThree::runIterations() {
 }
 
 // All of these are purely heuristic -Wayne (I think, at least -Marcus)
-// TODO: This should be refactored! And the tab characters replaced with spaces!
+// TODO: This should be refactored! (Marcus also wants tab characters replaced with spaces, but WH likes tabs)
 #define MAX_TAU_STEP 0.01
 #define MIN_TAU_STEP 0.001
 #define MIN_BATCHES 30
@@ -315,88 +315,88 @@ void SANAThree::runConfidenceIntervals() {
     threadPool->resetBuffers();
     T.start();
     for (tau = 0; tau <= 1; tau += tauStep) {
-	    int batchesPerTemperature = 0;
+	int batchesPerTemperature = 0;
         temperature = temperatureFunction(tau, tInitial, tDecay);
 
-	    // Now the "inner loop"
-	    bool satisfied = false;
-	    while(!satisfied) {
-	        if (saveAligAndExitOnInterruption) break;
-	        if (saveAligAndContOnInterruption) printReportOnInterruption();
+	// Now the "inner loop"
+	bool satisfied = false;
+	while(!satisfied) {
+	    if (saveAligAndExitOnInterruption) break;
+	    if (saveAligAndContOnInterruption) printReportOnInterruption();
 
-	        const batchOutput output = threadPool->collectBatch(temperature);
+	    const batchOutput output = threadPool->collectBatch(temperature);
 
             ++batch; ++batchesPerTemperature;
-		    StatAddSample(scoreBatchMeans, output.averageScore);
-		    StatAddSample(pBadBatchMeans, output.averagePBad);
+	    StatAddSample(scoreBatchMeans, output.averageScore);
+	    StatAddSample(pBadBatchMeans, output.averagePBad);
 
-		    if(StatNumSamples(scoreBatchMeans)>=MIN_BATCHES){
-		        double pBadInterval = tolPerStep;
-		        double scoreInterval = pBadInterval;
+	    if(StatNumSamples(scoreBatchMeans)>=MIN_BATCHES) {
+		double pBadInterval = tolPerStep;
+		double scoreInterval = pBadInterval;
 
-		        // The user specifies a *relative* tolerance on the FINAL score... but we don't know what the final
-		        // score will be. Thus, early on when the score is low and pBad is high, we punt to using (effectively)
-		        // an absolute tolerance by multiplying the tolerance by pBad. Then, as the score increases and
-		        // surpasses pBad, transition to a genuine relative tolerance by multiplying by the score.
-		        double relativeMultiplier = MAX(StatMean(scoreBatchMeans), StatMean(pBadBatchMeans));
+		// The user specifies a *relative* tolerance on the FINAL score... but we don't know what the final
+		// score will be. Thus, early on when the score is low and pBad is high, we punt to using (effectively)
+		// an absolute tolerance by multiplying the tolerance by pBad. Then, as the score increases and
+		// surpasses pBad, transition to a genuine relative tolerance by multiplying by the score.
+		double relativeMultiplier = MAX(StatMean(scoreBatchMeans), StatMean(pBadBatchMeans));
 
-		        // HOWEVER, we also slowly decrease the tolerance (by slowly increasing the Interval), because
-		        // sometimes we can get "stuck" for a VERY long time at one temperature because the score
-		        // is fluctuating too much. Let's not get stuck too long.
-		        relativeMultiplier *= (1+log(batchesPerTemperature));
+		// HOWEVER, we also slowly decrease the tolerance (by slowly increasing the Interval), because
+		// sometimes we can get "stuck" for a VERY long time at one temperature because the score
+		// is fluctuating too much. Let's not get stuck too long.
+		relativeMultiplier *= (1+log(batchesPerTemperature));
 
-		        scoreInterval *= relativeMultiplier;
-		        pBadInterval *= relativeMultiplier;
-		        if(StatConfInterval(scoreBatchMeans, confidence) < scoreInterval &&
-			    StatConfInterval(pBadBatchMeans,  confidence) < pBadInterval) satisfied = true;
-		        else if(StatNumSamples(scoreBatchMeans) >= HAPPY_BATCHES) {
-			    // Reset the batch system if the score is increasing steadily, otherwise it can't "converge" without
-			    // an ENORMOUS number of batches to compensate for the "bias" that occurs in early batches.
-			    if(StatMean(scoreBatchMeans) > previousScore) { // adding + tolPerSstep/2 seems too much.
-			        if(verbose)
-				    printf(" ++++> temp %.4g, batchMeanScore %.3f (pBad %.3g) still increasing after %d batches; reset batches and continue\n",
-				    temperature, StatMean(scoreBatchMeans),
-				    StatConfInterval(pBadBatchMeans,  confidence), StatNumSamples(scoreBatchMeans));
-			        fflush(stdout);
-			        previousScore = StatMean(scoreBatchMeans);
-			        lastBatchCount = 0; StatReset(scoreBatchMeans); StatReset(pBadBatchMeans);
-			    } else if(tauStep>MIN_TAU_STEP && StatNumSamples(scoreBatchMeans) >= HAPPY_BATCHES+lastBatchCount) {
-			        if(verbose)
-				    printf(" ----> %d batches, avg score %g decreased at tau %g; reduce next tauStep from %g",
-				        StatNumSamples(scoreBatchMeans), StatMean(scoreBatchMeans), tau, tauStep);
-			        fflush(stdout);
-			        // tau -= tauStep;
-			        tauStep *= 2.0/3.0;
-			        if(tauStep < MIN_TAU_STEP) tauStep = MIN_TAU_STEP;
-			        // tau += tauStep;
-			        if(verbose) printf(" to %g and backtrack to tau %g\n", tauStep, tau);
-			        lastBatchCount = StatNumSamples(scoreBatchMeans);
-			    }
-		        }
+		scoreInterval *= relativeMultiplier;
+		pBadInterval *= relativeMultiplier;
+		if(StatConfInterval(scoreBatchMeans, confidence) < scoreInterval &&
+		    StatConfInterval(pBadBatchMeans,  confidence) < pBadInterval) satisfied = true;
+		else if(StatNumSamples(scoreBatchMeans) >= HAPPY_BATCHES) {
+		    // Reset the batch system if the score is increasing steadily, otherwise it can't "converge" without
+		    // an ENORMOUS number of batches to compensate for the "bias" that occurs in early batches.
+		    if(StatMean(scoreBatchMeans) > previousScore) { // adding + tolPerSstep/2 seems too much.
+			if(verbose)
+			    printf(" ++++> temp %.4g, batchMeanScore %.3f (pBad %.3g) still increasing after %d batches; reset batches and continue\n",
+			    temperature, StatMean(scoreBatchMeans),
+			    StatConfInterval(pBadBatchMeans,  confidence), StatNumSamples(scoreBatchMeans));
+			fflush(stdout);
+			previousScore = StatMean(scoreBatchMeans);
+			lastBatchCount = 0; StatReset(scoreBatchMeans); StatReset(pBadBatchMeans);
+		    } else if(tauStep>MIN_TAU_STEP && StatNumSamples(scoreBatchMeans) >= HAPPY_BATCHES+lastBatchCount) {
+			if(verbose)
+			    printf(" ----> %d batches, avg score %g decreased at tau %g; reduce next tauStep from %g",
+				StatNumSamples(scoreBatchMeans), StatMean(scoreBatchMeans), tau, tauStep);
+			fflush(stdout);
+			// tau -= tauStep;
+			tauStep *= 2.0/3.0;
+			if(tauStep < MIN_TAU_STEP) tauStep = MIN_TAU_STEP;
+			// tau += tauStep;
+			if(verbose) printf(" to %g and backtrack to tau %g\n", tauStep, tau);
+			lastBatchCount = StatNumSamples(scoreBatchMeans);
 		    }
-	        }
+		}
+	    }
+	}
         currentScore = MC->eval(alignment);
         trackProgress(batch * batchSize, tau, T.elapsed(), temperature, threadPool->recentPBadTrue(), batchesPerTemperature,
                       StatMean(scoreBatchMeans), StatMean(pBadBatchMeans));
-	    if(tauStep < MAX_TAU_STEP) {
-	        if(StatNumSamples(scoreBatchMeans) < HAPPY_BATCHES) {
-		    if(verbose) printf(" *****> doing OK at tau %g & %d batches; increasing tauStep from %g",
-		        tau, StatNumSamples(scoreBatchMeans), tauStep);
-		    tauStep *= 3;
-		    if(tauStep > MAX_TAU_STEP) tauStep = MAX_TAU_STEP;
-		    if(verbose) printf(" to %g\n", tauStep);
-	        }
-	        else if(StatMean(scoreBatchMeans) + 0.00 < previousScore) {
-		    if(verbose) printf(" !!!!!> score %g is stuck below previous %g; skip region by increasing tauStep from %g",
-		        StatMean(scoreBatchMeans), previousScore, tauStep);
-		    fflush(stdout);
-		    tauStep *= 10; // if the score is not increasing... skip this region
-		    if(tauStep > MAX_TAU_STEP) tauStep = MAX_TAU_STEP;
-		    if(verbose) printf(" to %g\n", tauStep);
-	        }
+	if(tauStep < MAX_TAU_STEP) {
+	    if(StatNumSamples(scoreBatchMeans) < HAPPY_BATCHES) {
+		if(verbose) printf(" *****> doing OK at tau %g & %d batches; increasing tauStep from %g",
+		    tau, StatNumSamples(scoreBatchMeans), tauStep);
+		tauStep *= 3;
+		if(tauStep > MAX_TAU_STEP) tauStep = MAX_TAU_STEP;
+		if(verbose) printf(" to %g\n", tauStep);
 	    }
-	    previousScore = StatMean(scoreBatchMeans);
-	    StatReset(scoreBatchMeans); StatReset(pBadBatchMeans);
+	    else if(StatMean(scoreBatchMeans) + 0.00 < previousScore) {
+		if(verbose) printf(" !!!!!> score %g is stuck below previous %g; skip region by increasing tauStep from %g",
+		    StatMean(scoreBatchMeans), previousScore, tauStep);
+		fflush(stdout);
+		tauStep *= 10; // if the score is not increasing... skip this region
+		if(tauStep > MAX_TAU_STEP) tauStep = MAX_TAU_STEP;
+		if(verbose) printf(" to %g\n", tauStep);
+	    }
+	}
+	previousScore = StatMean(scoreBatchMeans);
+	StatReset(scoreBatchMeans); StatReset(pBadBatchMeans);
     }
     cout<<"Performed "<<batch<<" total batches\n";
     trackProgress(batch * batchSize, tau, T.elapsed(), temperature, threadPool->recentPBadQuick());
@@ -420,7 +420,80 @@ void SANAThree::runHillClimbing() {
     cout<<"Hill climbing took "<<T.elapsedString()<<"s"<<endl;
 }
 
+#if 0
+    Note: The deterministic if-cascade below may instead need to use randomness to choose among the possibilities.
+       One way to do this could be to do a "normal" (Marcus) move, perhaps with probability (1-tau) \in [0,1], so that
+       we initially do mostly "Marcus" moves, transitioning to "allowed Partner" moves as the anneal progresses.
+Basic idea:
+    pick any hole at random (possibly restricted to those that are either EMPTY or UNHAPPY)
+    if hole has no allowed partner pegs
+	pick ANY (unhappy?) peg and pull it here
+    else
+	if hole has any unhappy partner pegs
+	    pick one and pull it here
+	else
+	    pick an already happy partner peg and pull it here
+	fi
+    fi
+    // NOTE: "pull it here" means "move" it if the hole was empty, otherwise "swap" with the hole the other peg is in.
+#endif
+// Special case of allowedPartners requests (which is incompatible with node color system)
+SANAThree::changeRequest SANAThree::allowedPartnersRequest(mt19937_64 &generator) {
+    assert(G1->numColors()==1 && G2->numColors()==1);
+    const unsigned color = 0;
+
+    unique_lock<mutex> lockAlignmentAndHoles(alignmentMutex, defer_lock);
+    // Request parameters
+    bool twoPegs = false;
+    unsigned peg1, peg2 = -1; // Garbage allocation so that an exception will occur if not set and then used
+    unsigned hole1, hole2;
+    unsigned hole2unassignedID = -1;
+
+    while(true) {
+	// pick hole2 first since it's the only one that could potentially be empty
+	lockAlignmentAndHoles.lock();
+	// hole2 = G2->getNumNodes() * randomReal(generator); // pick any hole
+	do {
+	    hole2 = G2->getNumNodes() * randomReal(generator);
+	} while(alignment.isHappyHole(hole2)); // isHappyHole is false if the hole is empty
+	peg2 = alignment.whichPeg(hole2); // can be (-1)
+
+	if(alignment.allowedPegs(hole2).size() == 0) // if no partners exist, pick a UNHAPPY random peg
+	    do peg1 = G1->getNumNodes() * randomReal(generator);
+	    while(alignment.isHappyPeg(peg1));
+	else {
+	    unordered_set<uint> myUnhappyPegs;
+	    for(const auto peg : alignment.allowedPegs(hole2))
+		if(peg!=peg2 && !alignment.isHappy(peg, hole2))
+		    myUnhappyPegs.insert(peg);
+	    if(myUnhappyPegs.size()) { // there exist unhappy pegs; choose one and pull it here
+		uint randIndex = myUnhappyPegs.size() * randomReal(generator);
+		auto it = myUnhappyPegs.begin(); std::advance(it, randIndex);
+		peg1 = *it;
+	    } else { // all of hole2's allowed pegs are already happy, but pick one and pull it here anyay
+		uint randIndex = alignment.allowedPegs(hole2).size() * randomReal(generator);
+		auto it = alignment.allowedPegs(hole2).begin(); std::advance(it, randIndex);
+		peg1 = *it;
+	    }
+	}
+	hole1 = alignment[peg1];
+	if(peg2 == (uint)(-1)) {
+	    twoPegs = false;
+	    hole2unassignedID = hole1; //alignmentNumber % numUnassignedHoles; // Marcus: this is the part I don't know how to handle
+	} else
+	    twoPegs = true;
+	if (holeLocks[hole1] || holeLocks[hole2]) {
+	    lockAlignmentAndHoles.unlock();
+	    continue;
+	}
+	holeLocks[hole1] = holeLocks[hole2] = true;
+	return {twoPegs, peg1, peg2, hole1, hole2, hole2unassignedID, color, 0.0};
+    }
+}
+
 SANAThree::changeRequest SANAThree::chooseNextRequest(mt19937_64 &generator) {
+    if(alignment.allowedPartnersEnabled()) return allowedPartnersRequest(generator);
+
     unique_lock<mutex> lockAlignmentAndHoles(alignmentMutex, defer_lock);
 
     // Request parameters
@@ -558,7 +631,7 @@ double SANAThree::implementLastRequest(double pBad, const changeRequest &input, 
 }
 
 // TODO
-// This function should be written in C++, not C
+// This function should NOT be re-written in C++, because C++ sucks at formatted output
 void SANAThree::trackProgress(long long unsigned iter, double fractionTime, double elapsedTime,
     double temperature, double lastAvgPBad, unsigned batches, double batchScore, double batchPbad) const {
 
