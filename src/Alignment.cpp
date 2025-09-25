@@ -188,7 +188,13 @@ void Alignment::loadAllowedPartners(const Graph& G1, const Graph& G2, const stri
     cout << "loaded " << allowedPeg2Hole.size() << " allowed pegs and " << allowedHole2Peg.size() << " holes.\n";
 }
 
-uint Alignment::whichPeg(uint hole) { for(const auto& peg : A) if(A[peg]==hole) return peg; return -1; }
+uint Alignment::whichPeg(uint hole) {
+    for(const auto& peg : A) {
+	// assert(peg<98246); assert(A[peg] < 136648); // for FlyWire BANC <-> FAFB
+	if(A[peg]==hole) return (uint)peg;
+    }
+    return -1;
+}
 
 Alignment Alignment::random(uint n1, uint n2) {
     //taken from: http://stackoverflow.com/questions/311703/algorithm-for-sampling-without-replacement

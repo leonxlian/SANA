@@ -457,6 +457,7 @@ SANAThree::changeRequest SANAThree::allowedPartnersRequest(mt19937_64 &generator
 	    hole2 = G2->getNumNodes() * randomReal(generator);
 	} while(alignment.isHappyHole(hole2)); // isHappyHole is false if the hole is empty
 	peg2 = alignment.whichPeg(hole2); // can be (-1)
+	assert(peg2 == (unsigned)(-1) || peg2 < G1->getNumNodes());
 
 	if(alignment.allowedPegs(hole2).size() == 0) // if no partners exist, pick a random UNHAPPY peg
 	    do peg1 = G1->getNumNodes() * randomReal(generator);

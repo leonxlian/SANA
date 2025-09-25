@@ -72,8 +72,8 @@ public:
     bool isCorrectlyDefined(const Graph& G1, const Graph& G2) const;
     void printDefinitionErrors(const Graph& G1, const Graph& G2) const;
 
-    unordered_set<uint> allowedPegs(const uint hole) { return allowedHole2Peg[hole]; }
-    unordered_set<uint> allowedHoles(const uint peg) { return allowedPeg2Hole[peg]; }
+    unordered_set<uint>& allowedPegs(const uint hole) { return allowedHole2Peg[hole]; }
+    unordered_set<uint>& allowedHoles(const uint peg) { return allowedPeg2Hole[peg]; }
     bool allowedPartnersEnabled(void) { return allowedPeg2Hole.size() || allowedHole2Peg.size(); }
     bool isHappy(const uint peg, const uint hole) {
 	if(peg==(uint)(-1) || hole ==(uint)(-1)) return false;
