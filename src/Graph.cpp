@@ -1,20 +1,11 @@
 #include "Graph.hpp"
 #include <queue>
-#include <set>
-#include <unordered_set>
 #include <iterator>
-#include <cmath>
 #include <cassert>
 #include <sstream>
-#include <typeinfo> //typeid
 #include <fcntl.h>
-#include <unistd.h>
-#include <sys/file.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <errno.h>
-#include <unistd.h>
 #include <regex>
+#include <set>
 
 #ifdef MULTI_MPI
 #include "Alignment.hpp" // alignment needed for pruning

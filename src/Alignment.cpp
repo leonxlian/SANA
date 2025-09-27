@@ -4,10 +4,13 @@
 #include "utils/FileIO.hpp"
 using namespace std;
 
+// WARNING: the allowed list is GLOBAL to the Alignment class
+unordered_map<uint, unordered_set<uint>> Alignment::allowedPeg2Hole, Alignment::allowedHole2Peg;
+
 Alignment::Alignment() {}
 Alignment::Alignment(const vector<uint>& mapping): A(mapping) {}
 Alignment::Alignment(const Alignment& alig): A(alig.A) {}
-Alignment::Alignment(const Graph& G1, const Graph& G2, const vector<array<string, 2>>& edgeList) {
+Alignment::Alignment(const Graph& G1, const Graph& G2, const vector<array<string, 2>>& edgeList) : _G1(&G1), _G2(&G2) {
     uint n1 = G1.getNumNodes(), n2 = G2.getNumNodes();
     assert(n1 == edgeList.size());
     A = vector<uint>(n1, n2); //n2 used to denote invalid index
@@ -135,6 +138,47 @@ Alignment Alignment::loadMapping(const string& fileName) {
     return A;
 }
 
+// Function to read a line from an input stream and split it into words.
+static std::vector<std::string> lineToWords(const std::string& line) {
+    std::vector<std::string> words;
+    std::stringstream ss(line);
+    std::string word;
+    while (ss >> word) {
+	words.push_back(word);
+    }
+    return words;
+}
+
+void Alignment::loadAllowedPartners(const Graph& G1, const Graph& G2, const string& fileName) {
+    if (not FileIO::fileExists(fileName)) {
+	throw runtime_error("Starting alignment file "+fileName+" not found");
+    }
+    cout << "loading allowed partners from file " << fileName << '\n';
+    ifstream ifs(fileName);
+    string line;
+    while(FileIO::safeGetLine(ifs, line)) {
+	std::vector<std::string> words = lineToWords(line);
+	assert(words.size() >= 2);
+	if(!G1.hasNodeName(words[0])) {
+	    cerr << "WARNING: can't load allowedPartners for non-existant G1 node " << words[0] << '\n';
+	    continue;
+	}
+	uint peg = G1.getNameIndex(words[0]);
+	unordered_set<uint> partners;
+	for (size_t i = 1; i < words.size(); ++i) {
+	    if(!G2.hasNodeName(words[i])) {
+		cerr << "WARNING: can't load non-existant allowedPartner G2 node " << words[i] << '\n';
+		continue;
+	    }
+	    uint hole = G2.getNameIndex(words[i]);
+	    partners.insert(hole);
+	    allowedHole2Peg[hole].insert(peg);
+	}
+	allowedPeg2Hole[peg] = partners;
+    }
+    cout << "loaded " << allowedPeg2Hole.size() << " allowed pegs and " << allowedHole2Peg.size() << " holes.\n";
+}
+
 Alignment Alignment::random(uint n1, uint n2) {
     //taken from: http://stackoverflow.com/questions/311703/algorithm-for-sampling-without-replacement
     vector<uint> alignment(n1);
@@ -206,9 +250,9 @@ uint Alignment::computeNumAlignedEdges(const Graph& G1, const Graph& G2) const {
 
 Alignment Alignment::reverse(uint n2) const {
     uint n1 = size();
-    vector<uint> A(n2, n1); //n1 used for invalid mapping
-    for (uint i = 0; i < n1; i++) A[A[i]] = i;
-    return Alignment(A);
+    vector<uint> A_(n2, n1); //n1 used for invalid mapping
+    for (uint i = 0; i < n1; i++) A_[A[i]] = i;
+    return Alignment(A_);
 }
 
 void Alignment::compose(const Alignment& other) {
@@ -237,7 +281,7 @@ void Alignment::printDefinitionErrors(const Graph& G1, const Graph& G2) {
     vector<bool> G2AssignedNodes(n2, false);
     vector<uint> colorMap = G1.myColorIdsToOtherGraphColorIds(G2);
     int count = 0;
-    if (A.size() != n1) 
+    if (A.size() != n1)
         cerr << "Incorrect size: "<<A.size()<<", should be "<<n1<<endl;
     for (uint i = 0; i < n1; i++) {
         if (A[i] < 0 or A[i] >= n2) {
@@ -278,7 +322,7 @@ Alignment Alignment::randomColorRestrictedAlignment(const Graph& G1, const Graph
     for (uint g1ColId = 0; g1ColId < G1.numColors(); g1ColId++) {
         randomShuffle(g1ColIdToG2Nodes[g1ColId]);
     }
-    
+
     vector<uint> A(0);
     A.reserve(G1.getNumNodes());
     for (uint g1Node = 0; g1Node < G1.getNumNodes(); g1Node++) {
@@ -295,5 +339,5 @@ Alignment Alignment::randomColorRestrictedAlignment(const Graph& G1, const Graph
         alig.printDefinitionErrors(G1, G2);
         throw runtime_error("alignment not correctly defined");
     }
-    return alig;   
+    return alig;
 }

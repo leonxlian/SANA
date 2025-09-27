@@ -64,6 +64,7 @@ SANA::SANA(const Graph* G1, const Graph* G2,
         const string& outputFileName, const string& localScoresFileName):
                 Method(G1, G2, "SANA_"+MC->toString()),
                 startA(startA),
+		alignment(startA),
                 addHillClimbing(addHillClimbing),
                 TInitial(TInitial), TDecay(TDecay),
                 wasBadMove(false),
@@ -361,7 +362,9 @@ void SANA::initDataStructures() {
         ncSum       = (nc->eval(alig))*trueAWithValidCountAppended.back();
     }
     currentScore = eval(alig);
+    alignment = alig;
     A = alig.asVector();
+    A_ = alig.reverse(G2->getNumNodes()).asVector();
     timer.start();
 }
 
@@ -770,14 +773,63 @@ uint SANA::randomG1NodeWithActiveColor(uint actColId, bool dynamic) const {
     return G1->nodeGroupsByColor[g1ColId][randNodeIndexOfColor];
 }
 
+#if 0
+    ********************** pseudo-code for the allowedPartners case ***********************
+    Note: The deterministic if-cascade below may instead need to use randomness to choose among the possibilities.
+       One way to do this could be to do a "normal" (Marcus) move, perhaps with probability (1-tau) \in [0,1], so that
+       we initially do mostly "Marcus" moves, transitioning to "allowed Partner" moves as the anneal progresses.
+Basic idea:
+    pick any hole at random (possibly restricted to those that are either EMPTY or UNHAPPY)
+    if hole has no allowed partner pegs
+	pick ANY (unhappy?) peg and pull it here
+    else
+	if hole has any unhappy partner pegs
+	    pick one and pull it here
+	else
+	    pick an already happy partner peg and pull it here
+	fi
+    fi
+    // NOTE: "pull it here" means "move" it if the hole was empty, otherwise "swap" with the hole the other peg is in.
+#endif
 void SANA::performChange(uint actColId) {
-    uint peg = randomG1NodeWithActiveColor(actColId, true);
-    uint oldHole = A[peg];
-    uint numUnassigWithCol = actColToUnassignedG2Nodes[actColId].size();
-    uint unassignedVecIndex = randInt(0, numUnassigWithCol-1);
-    uint newHole = actColToUnassignedG2Nodes[actColId][unassignedVecIndex];
-
+    uint peg, oldHole, numUnassigWithCol, unassignedVecIndex, newHole;
+    numUnassigWithCol = actColToUnassignedG2Nodes[actColId].size();
     assert(numUnassigWithCol > 0);
+    if(alignment.allowedPartnersEnabled()) {
+	assert(G1->numColors()==1 && G2->numColors()==1);
+        do {
+	    unassignedVecIndex = randInt(0, numUnassigWithCol-1);
+	    newHole = actColToUnassignedG2Nodes[actColId][unassignedVecIndex];
+        } while(isHappyHole(newHole));
+	assert(A_[newHole]==G1->getNumNodes());
+	if(alignment.allowedPegs(newHole).size() == 0) // if no partners exist, pick a random UNHAPPY peg
+            do peg = randomG1NodeWithActiveColor(actColId, true);
+            while(isHappyPeg(peg));
+        else {
+            unordered_set<uint> myUnhappyPegs;
+            for(const auto p : alignment.allowedPegs(newHole))
+                if(!alignment.isHappy(p, newHole))
+                    myUnhappyPegs.insert(p);
+            if(myUnhappyPegs.size()) { // there exist unhappy pegs; choose one and pull it here
+                uint randIndex = myUnhappyPegs.size() * randomReal(gen);
+                auto it = myUnhappyPegs.begin(); std::advance(it, randIndex);
+                peg = *it;
+            } else { // all of hole2's allowed pegs are already happy, but pick one and pull it here anyay
+                uint randIndex = alignment.allowedPegs(newHole).size() * randomReal(gen);
+                auto it = alignment.allowedPegs(newHole).begin(); std::advance(it, randIndex);
+                peg = *it;
+            }
+        }
+        assert(peg < G1->getNumNodes());
+        oldHole = alignment[peg];
+    } else {
+	peg = randomG1NodeWithActiveColor(actColId, true);
+	oldHole = A[peg];
+	numUnassigWithCol = actColToUnassignedG2Nodes[actColId].size();
+	unassignedVecIndex = randInt(0, numUnassigWithCol-1);
+	newHole = actColToUnassignedG2Nodes[actColId][unassignedVecIndex];
+    }
+
     assert(oldHole != newHole);
     // assert(G1->getColorName(G1->getNodeColor(peg)) == G2->getColorName(G2->getNodeColor(oldHole)));
     // assert(G2->getNodeColor(newHole) == G2->getNodeColor(oldHole));
@@ -836,7 +888,10 @@ void SANA::performChange(uint actColId) {
 
     if (makeChange) {
 	stationary[peg]=0;
-        A[peg] = newHole;
+	assert(A_[newHole] == G1->getNumNodes()); // should be empty
+	A_[oldHole] = G1->getNumNodes(); // oldHole becomes empty, so n1 = invalid
+	alignment[peg] = A[peg] = newHole;
+	A_[newHole] = peg;
         actColToUnassignedG2Nodes[actColId][unassignedVecIndex] = oldHole;
         assignedNodesG2[oldHole] = false;
         assignedNodesG2[newHole] = true;
@@ -872,14 +927,52 @@ void SANA::performChange(uint actColId) {
 }
 
 void SANA::performSwap(uint actColId) {
-    uint peg1 = randomG1NodeWithActiveColor(actColId, true);
-    uint peg2;
-    for (uint i = 0; i < 100; i++) { //each attempt has >=50% chance of success
-        peg2 = randomG1NodeWithActiveColor(actColId, false);
-        if (peg1 != peg2) break;
+    uint peg1, peg2, hole1, hole2;
+    if(alignment.allowedPartnersEnabled()) {
+	assert(G1->numColors()==1 && G2->numColors()==1);
+        do {
+	    hole2 = G2->getNumNodes() * randomReal(gen);
+        } while(isHappyHole(hole2)); // isHappyHole is false if the hole is empty
+	peg2 = A_[hole2];
+	assert(peg2 < G1->getNumNodes());
+	uint h2s = alignment.allowedPegs(hole2).size();
+	if(h2s == 0) // if no partners exist, pick a random UNHAPPY peg
+	    do peg1 = randomG1NodeWithActiveColor(actColId, true);
+	    while(isHappyPeg(peg1));
+        else {
+            unordered_set<uint> myUnhappyPegs;
+            for(const auto peg : alignment.allowedPegs(hole2))
+                if(peg!=peg2 && !alignment.isHappy(peg, hole2))
+                    myUnhappyPegs.insert(peg);
+            if(myUnhappyPegs.size()) { // there exist unhappy pegs; choose one and pull it here
+                uint randIndex = myUnhappyPegs.size() * randomReal(gen);
+                auto it = myUnhappyPegs.begin(); std::advance(it, randIndex);
+                peg1 = *it;
+            } else { // all of hole2's allowed pegs are already happy, but pick one and pull it here anyay
+		do {
+		    uint randIndex = h2s * randomReal(gen);
+		    auto it = alignment.allowedPegs(hole2).begin(); std::advance(it, randIndex);
+		    peg1 = *it;
+		} while(peg1==peg2);
+            }
+        }
+        assert(peg1 < G1->getNumNodes());
+	assert(peg1!=peg2);
+        hole1 = alignment[peg1];
+        assert(peg2 != (uint)(-1));
+    } else {
+	peg1 = randomG1NodeWithActiveColor(actColId, true);
+	for (uint i = 0; i < 100; i++) { //each attempt has >=50% chance of success
+	    peg2 = randomG1NodeWithActiveColor(actColId, false);
+	    if (peg1 != peg2) break;
+	}
+	hole1 = A[peg1]; hole2 = A[peg2];
     }
     assert(peg1 != peg2);
-    uint hole1 = A[peg1], hole2 = A[peg2];
+    assert(peg1 != (uint)(-1));
+    assert(peg2 != (uint)(-1));
+    assert(peg1 < G1->getNumNodes());
+    assert(peg2 < G1->getNumNodes());
     assert(hole1 != hole2);
     // assert(G1->getNodeColor(peg1) == G1->getNodeColor(peg2));
     // assert(G2->getNodeColor(hole1) == G2->getNodeColor(hole2));
@@ -938,21 +1031,22 @@ void SANA::performSwap(uint actColId) {
 
     if (makeChange) {
 	stationary[peg1]=stationary[peg2]=0;
-        A[peg1]          = hole2;
-        A[peg2]          = hole1;
-        aligEdges           = newAligEdges;
-        edSum               = newEdSum;
-        erSum               = newErSum;
-        eminSum             = newEminSum;
-        localScoreSum       = newLocalScoreSum;
-        wecSum              = newWecSum;
-        ewecSum             = newEwecSum;
-        ncSum               = newNcSum;
-        currentScore        = newCurrentScore;
-        squaredAligEdges    = newSquaredAligEdges;
-        EdgeExposure::numer = newExposedEdgesNumer;
-        MultiS3::numer      = newMS3Numer;
-        if (needLocal) localScoreSumMap = newLocalScoreSumMap;
+	assert(A_[hole1]==peg1 && A_[hole2]==peg2);
+	alignment[peg1] = A[peg1] = hole2; A_[hole2] = peg1;
+	alignment[peg2] = A[peg2] = hole1; A_[hole1] = peg2;
+	aligEdges           = newAligEdges;
+	edSum               = newEdSum;
+	erSum               = newErSum;
+	eminSum             = newEminSum;
+	localScoreSum       = newLocalScoreSum;
+	wecSum              = newWecSum;
+	ewecSum             = newEwecSum;
+	ncSum               = newNcSum;
+	currentScore        = newCurrentScore;
+	squaredAligEdges    = newSquaredAligEdges;
+	EdgeExposure::numer = newExposedEdgesNumer;
+	MultiS3::numer      = newMS3Numer;
+	if (needLocal) localScoreSumMap = newLocalScoreSumMap;
     } else {
 	if(stationary[peg1]>=MAX_STATIONARY) stationary[peg1]=0; else ++stationary[peg1];
 	if(stationary[peg2]>=MAX_STATIONARY) stationary[peg2]=0; else ++stationary[peg2];
@@ -1314,7 +1408,6 @@ int SANA::MS3VariantHelper(const uint peg, const uint hole, bool departs){
         assert(hole == A[peg]);
     else
         assert(hole != A[peg]);
-    vector<uint> whichPeg(n2, n1); // value of n1 represents not used
     uint numNeigh = G1->adjLists[peg].size();
     int factor = departs? -1 : 1;
     for (uint i = 0; i < numNeigh; ++i){ // for all of u's neighbor
@@ -1431,16 +1524,7 @@ int SANA::MS3IncChangeOp(uint peg, uint oldHole, uint newHole) {
 
     const uint n1 = G1->getNumNodes();
     const uint n2 = G2->getNumNodes();
-    vector<uint> whichPeg(n2, n1); // value of n1 represents not used
-    for (uint i = 0; i < n1; ++i){
-	// inverse of the alignment--but this is stupidly EXPENSIVE to do for every proposed move!
-	// Instead, we should have an inverse alignment stored simultaneously, and have it updated
-	// either explicitly or automatically using overload of the array operator. There is also
-	// a reverse() member function but that'll be equally expensive. It should be stored and
-	// incrementally updated and checked periodically just like we check incremental scores.
-	whichPeg[A[i]] = i;
-    }
-    assert(whichPeg[newHole] == n1); // hole should be empty
+    assert(A_[newHole] == n1); // hole should be empty
 
     switch (MultiS3::denominator_type) {
         case MultiS3::mre_k:
@@ -1449,7 +1533,7 @@ int SANA::MS3IncChangeOp(uint peg, uint oldHole, uint newHole) {
             uint numNeigh = G2->adjLists[oldHole].size();
             for (uint i = 0; i < numNeigh; i++){
                 holeNeigh = G2->adjLists[oldHole][i];
-                if (whichPeg[holeNeigh]<n1) {
+                if (A_[holeNeigh]<n1) {
 		    assert(holeNeigh != newHole); // the new hole should be empty!
                     MultiS3::denom -= G2->getEdgeWeight(oldHole,holeNeigh);
 		}
@@ -1457,8 +1541,8 @@ int SANA::MS3IncChangeOp(uint peg, uint oldHole, uint newHole) {
 	    numNeigh = G2->adjLists[newHole].size();
 	    for (uint i =0; i < numNeigh; i++){
 		holeNeigh = G2->adjLists[newHole][i];
-		if (whichPeg[holeNeigh]<n1) {
-		    if(holeNeigh == oldHole) assert(whichPeg[oldHole] == peg);
+		if (A_[holeNeigh]<n1) {
+		    if(holeNeigh == oldHole) assert(A_[oldHole] == peg);
 		    else MultiS3::denom += G2->getEdgeWeight(newHole,holeNeigh);
 		}
 	    }
@@ -1470,7 +1554,7 @@ int SANA::MS3IncChangeOp(uint peg, uint oldHole, uint newHole) {
             uint numNeigh = G2->adjLists[oldHole].size();
             for (uint i =0; i < numNeigh; i++){
                 holeNeigh = G2->adjLists[oldHole][i];
-                if (whichPeg[holeNeigh]<n1){
+                if (A_[holeNeigh]<n1){
                     MultiS3::denom--;
                 }
             }
@@ -1487,7 +1571,7 @@ int SANA::MS3IncChangeOp(uint peg, uint oldHole, uint newHole) {
             numNeigh = G2->adjLists[newHole].size();
             for (uint i =0; i < numNeigh; i++){
                 holeNeigh = G2->adjLists[newHole][i];
-                if (whichPeg[holeNeigh]<n1 and peg!=whichPeg[holeNeigh] ){
+                if (A_[holeNeigh]<n1 and peg!=A_[holeNeigh] ){
                     MultiS3::denom++;
                 }
             }
@@ -1497,13 +1581,13 @@ int SANA::MS3IncChangeOp(uint peg, uint oldHole, uint newHole) {
 	    {
             int oldEdgeWeights = 0;
             for ( uint nbr : *(G2->getAdjList(oldHole))) {
-                if (whichPeg[nbr] != n1){
+                if (A_[nbr] != n1){
                     oldEdgeWeights += G2->getEdgeWeight(oldHole, nbr);
                 }
             }
             int newEdgeWeights = 0;
             for ( uint nbr : *(G2->getAdjList(newHole))) {
-                if (whichPeg[nbr] != n1 and nbr != oldHole) {
+                if (A_[nbr] != n1 and nbr != oldHole) {
                     newEdgeWeights += G2->getEdgeWeight(newHole, nbr);
                 }
             }
@@ -1521,7 +1605,7 @@ int SANA::MS3IncChangeOp(uint peg, uint oldHole, uint newHole) {
             uint numNeigh = G2->adjLists[oldHole].size();
             for (uint i =0; i < numNeigh; i++){
                 holeNeigh = G2->adjLists[oldHole][i];
-                if (whichPeg[holeNeigh]<n1){
+                if (A_[holeNeigh]<n1){
                     MultiS3::denom--;
                 }
             }
@@ -1538,7 +1622,7 @@ int SANA::MS3IncChangeOp(uint peg, uint oldHole, uint newHole) {
             numNeigh = G2->adjLists[newHole].size();
             for (uint i =0; i < numNeigh; i++){
                 holeNeigh = G2->adjLists[newHole][i];
-                if (whichPeg[holeNeigh]<n1 and peg!=whichPeg[holeNeigh] ){
+                if (A_[holeNeigh]<n1 and peg!=A_[holeNeigh] ){
                     MultiS3::denom++;
                 }
             }
@@ -1774,15 +1858,13 @@ int SANA::MS3IncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
       }
     const uint n1 = G1->getNumNodes();
     const uint n2 = G2->getNumNodes();
-    vector<uint> whichPeg(n2, n1);
-    for (uint i = 0; i < n1; ++i) whichPeg[A[i]] = i; // inverse of the alignment
     switch (MultiS3::denominator_type){
       case MultiS3::rt_k:
         {
               uint numNeigh = G2->adjLists[hole1].size();
               for (uint i=0; i < numNeigh; i++){
                   holeNeigh = G2->adjLists[hole1][i];
-                  if (holeNeigh!=hole2 && whichPeg[holeNeigh]<n1){
+                  if (holeNeigh!=hole2 && A_[holeNeigh]<n1){
                       MultiS3::denom-=G2->getEdgeWeight(hole1,holeNeigh);
                       MultiS3::denom+=G2->getEdgeWeight(hole2,holeNeigh);
                   }
@@ -1790,7 +1872,7 @@ int SANA::MS3IncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
               numNeigh = G2->adjLists[hole2].size();
               for (uint i =0; i < numNeigh; i++){
                   holeNeigh = G2->adjLists[hole2][i];
-                  if (holeNeigh != hole1 && whichPeg[holeNeigh]<n1){
+                  if (holeNeigh != hole1 && A_[holeNeigh]<n1){
                       MultiS3::denom-=G2->getEdgeWeight(hole2,holeNeigh);
                       MultiS3::denom+=G2->getEdgeWeight(hole1,holeNeigh);
                    }
@@ -1802,7 +1884,7 @@ int SANA::MS3IncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
               uint numNeigh = G2->adjLists[hole1].size();
               for (uint i =0; i < numNeigh; i++){
                   holeNeigh = G2->adjLists[hole1][i];
-                  if (whichPeg[holeNeigh]<n1 and holeNeigh!=hole2 and G2->getEdgeWeight(holeNeigh,hole1)){
+                  if (A_[holeNeigh]<n1 and holeNeigh!=hole2 and G2->getEdgeWeight(holeNeigh,hole1)){
                       MultiS3::denom--;
                   }
               }
@@ -1822,14 +1904,14 @@ int SANA::MS3IncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
               numNeigh = G2->adjLists[hole2].size();
               for (uint i =0; i < numNeigh; i++){
                   holeNeigh = G2->adjLists[hole2][i];
-                  if (holeNeigh!=hole1 and whichPeg[holeNeigh]<n1 and peg1!=whichPeg[holeNeigh] and !G2->getEdgeWeight(holeNeigh,hole2)){
+                  if (holeNeigh!=hole1 and A_[holeNeigh]<n1 and peg1!=A_[holeNeigh] and !G2->getEdgeWeight(holeNeigh,hole2)){
                       MultiS3::denom++;
                   }
               }
               numNeigh = G2->adjLists[hole2].size();
               for (uint i =0; i < numNeigh; i++){
                   holeNeigh = G2->adjLists[hole2][i];
-                  if (holeNeigh!=hole1 and whichPeg[holeNeigh]<n1 and !G2->getEdgeWeight(hole2,holeNeigh)){
+                  if (holeNeigh!=hole1 and A_[holeNeigh]<n1 and !G2->getEdgeWeight(hole2,holeNeigh)){
                       MultiS3::denom--;
                   }
               }
@@ -1849,7 +1931,7 @@ int SANA::MS3IncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
               numNeigh = G2->adjLists[hole1].size();
               for (uint i =0; i < numNeigh; i++){
                   holeNeigh = G2->adjLists[hole1][i];
-                  if ( G2->getEdgeWeight(hole1,holeNeigh)>0 and whichPeg[holeNeigh]<n1 and holeNeigh!=hole2 and peg2!=whichPeg[holeNeigh]){
+                  if ( G2->getEdgeWeight(hole1,holeNeigh)>0 and A_[holeNeigh]<n1 and holeNeigh!=hole2 and peg2!=A_[holeNeigh]){
                       MultiS3::denom++;
                   }
               }
@@ -1868,7 +1950,7 @@ int SANA::MS3IncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
               uint numNeigh = G2->adjLists[hole1].size();
               for (uint i =0; i < numNeigh; i++){
                   holeNeigh = G2->adjLists[hole1][i];
-                  if (whichPeg[holeNeigh]<n1 and holeNeigh!=hole2 and G2->getEdgeWeight(holeNeigh,hole1)){
+                  if (A_[holeNeigh]<n1 and holeNeigh!=hole2 and G2->getEdgeWeight(holeNeigh,hole1)){
                       MultiS3::denom--;
                   }
               }
@@ -1888,14 +1970,14 @@ int SANA::MS3IncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
               numNeigh = G2->adjLists[hole2].size();
               for (uint i =0; i < numNeigh; i++){
                   holeNeigh = G2->adjLists[hole2][i];
-                  if (holeNeigh!=hole1 and whichPeg[holeNeigh]<n1 and peg1!=whichPeg[holeNeigh] and !G2->getEdgeWeight(holeNeigh,hole2)){
+                  if (holeNeigh!=hole1 and A_[holeNeigh]<n1 and peg1!=A_[holeNeigh] and !G2->getEdgeWeight(holeNeigh,hole2)){
                       MultiS3::denom++;
                   }
               }
               numNeigh = G2->adjLists[hole2].size();
               for (uint i =0; i < numNeigh; i++){
                   holeNeigh = G2->adjLists[hole2][i];
-                  if (holeNeigh!=hole1 and whichPeg[holeNeigh]<n1 and !G2->getEdgeWeight(hole2,holeNeigh)){
+                  if (holeNeigh!=hole1 and A_[holeNeigh]<n1 and !G2->getEdgeWeight(hole2,holeNeigh)){
                       MultiS3::denom--;
                   }
               }
@@ -1915,7 +1997,7 @@ int SANA::MS3IncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
               numNeigh = G2->adjLists[hole1].size();
               for (uint i =0; i < numNeigh; i++){
                   holeNeigh = G2->adjLists[hole1][i];
-                  if ( G2->getEdgeWeight(hole1,holeNeigh)>0 and whichPeg[holeNeigh]<n1 and holeNeigh!=hole2 and peg2!=whichPeg[holeNeigh]){
+                  if ( G2->getEdgeWeight(hole1,holeNeigh)>0 and A_[holeNeigh]<n1 and holeNeigh!=hole2 and peg2!=A_[holeNeigh]){
                       MultiS3::denom++;
                   }
               }
@@ -2170,6 +2252,8 @@ void SANA::trackProgress(long long int iter, double fractionTime, int batches, d
             cerr<<") is not correct ("<<realScore<<")"<<endl;
             currentScore = realScore;
         }
+	for(uint i=0; i<alignment.size(); i++)
+	    assert(alignment[i] == A[i]); // ensure Alignment and vector<uint> are the same
     }
 
     //code for estimating dynamic TDecay. The dynamic method uses linear interpolation to obtain an

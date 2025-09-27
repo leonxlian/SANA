@@ -5,6 +5,7 @@
 #include <string>
 #include "utils.hpp"
 #include "../Graph.hpp"
+#include "Timer.hpp"
 
 using namespace std;
 

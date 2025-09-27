@@ -4,17 +4,13 @@
 #include <string>
 #include <vector>
 #include <array>
-#include <utility>
-#include <algorithm>
 #include <iostream>
-#include <stdexcept>
-#include <cstdlib>
-#include <time.h>
+#include <unordered_map>
+#include <unordered_set>
+#include <memory>
 #include <random>
-#include "utils/utils.hpp"
-#include "utils/Timer.hpp"
-#include "computeGraphlets.hpp"
 #include "utils/Matrix.hpp"
+#include "utils/utils.hpp"
 
 #ifdef MULTI_MPI
 class Alignment;

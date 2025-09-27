@@ -10,6 +10,7 @@
 #include <algorithm>
 #include "Graph.hpp"
 #include "utils/utils.hpp"
+#include <atomic>
 
 using namespace std;
 
@@ -32,7 +33,9 @@ public:
     static Alignment loadPartialEdgeList(const Graph& G1, const Graph& G2, const string& fileName, bool byName);
     static Alignment loadMapping(const string& fileName);
     static Alignment randomColorRestrictedAlignment(const Graph& G1, const Graph& G2);
-    
+
+    void loadAllowedPartners(const Graph& G1, const Graph& G2, const string& fileName);
+
     //returns a random alignment from a graph with n1 nodes to a graph with nodes n2 >= n1 nodes
     static Alignment random(uint n1, uint n2);
     static Alignment empty();
@@ -62,8 +65,21 @@ public:
     bool isCorrectlyDefined(const Graph& G1, const Graph& G2);
     void printDefinitionErrors(const Graph& G1, const Graph& G2);
 
+    unordered_set<uint>& allowedPegs(const uint hole) { return allowedHole2Peg[hole]; }
+    unordered_set<uint>& allowedHoles(const uint peg) { return allowedPeg2Hole[peg]; }
+    bool allowedPartnersEnabled(void) { return allowedPeg2Hole.size() || allowedHole2Peg.size(); }
+    bool isHappy(const uint peg, const uint hole) {
+        if(peg==(uint)(-1) || hole ==(uint)(-1)) return false;
+        assert(allowedPeg2Hole[peg].count(hole)==allowedHole2Peg[hole].count(peg));
+        return allowedPeg2Hole[peg].count(hole);
+    }
 private:
-    vector<uint> A;
+    vector<uint> A; // B is the inverse alignment
+    // allowedPeg2Hole should basically be a set of entries of the form <G1node, set of G2 nodes>
+    // allowedHole2Peg is the inverse. Any node not listed is allowed to align anywhere
+    // NOTE: these are both GLOBAL to the Alignment class
+    static unordered_map<uint, unordered_set<uint>> allowedPeg2Hole, allowedHole2Peg;
+    const Graph *_G1, *_G2; // internal copies of the input graphs
 };
 
 #endif /* ALIGNMENT_HPP */

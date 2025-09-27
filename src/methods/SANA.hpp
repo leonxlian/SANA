@@ -57,7 +57,7 @@ public:
     double inf = std::numeric_limits<double>::infinity();
 
 private:
-    Alignment startA;
+    Alignment startA, alignment;
 
     bool addHillClimbing; //for post-run hill climbing
     bool multi_iteration_only=false; // if true, skip optional CPU-wasting steps
@@ -131,8 +131,11 @@ private:
     //initializes the data structures specific to the starting alignment
     //if startA is empty, a random alignment is used
     void initDataStructures();
-    vector<uint> A;
+    vector<uint> A, A_; // A_ is the inverse alignment of A
     vector<bool> assignedNodesG2;
+
+    bool isHappyPeg (const uint peg ) { return alignment.isHappy(peg, A[peg]); }
+    bool isHappyHole(const uint hole) { return alignment.isHappy(A_[hole], hole); }
 
     //objective function
     MeasureCombination* MC;
