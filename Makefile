@@ -2,7 +2,7 @@ ARCH=$(shell uname -a | awk '{if(/CYGWIN/){V="CYGWIN"}else if(/Darwin/){V="Darwi
 ARCH_FLAGS=$(shell ($(GCC) -v 2>&1; uname -a) | awk '/CYGWIN/{print "-U__STRICT_ANSI__"}')
 
 MY_CC = g++$(GCC_VER)
-CXXFLAGS = -I "src/utils" "-DLIBWAYNE=1" -Wall -std=gnu++11 -pthread $(ARCH_FLAGS) #-pg -fno-inline
+CXXFLAGS = -I "src/utils" "-DLIBWAYNE=1" -Wall -std=gnu++11 -pthread $(ARCH_FLAGS) #-fno-inline
 
 SANA_VER=2.1
 MAIN = sana$(SANA_VER)
@@ -27,6 +27,11 @@ endif
 ifeq ($(STATIC), 1)
     CXXFLAGS := $(CXXFLAGS) -static #-Bstatic for some versions of gcc
     MAIN := $(MAIN).static
+endif
+
+ifeq ($(PROFILE), 1)
+    CXXFLAGS := $(CXXFLAGS) -pg
+    MAIN := $(MAIN).pg
 endif
 
 ifeq ($(GDB), 1) # this one should be second-last since the debugging ones run slowly and should be used on smallish networks.

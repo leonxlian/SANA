@@ -1298,13 +1298,11 @@ int SANA::aligEdgesIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
 	res -= G2->getEdgeWeight(A[nbr],hole2);
 	res += G2->getEdgeWeight(A[nbr],hole1);
     }
-
     //address the case where we are swapping between adjacent nodes with adjacent images:
 #if defined(MULTI_PAIRWISE) || defined(MULTI_MPI)
     //why set the least-significant bit to 0?
     //this kind of bit manipulation needs a comment clarification -Nil
-    res += (-1 << 1) & (G1->getEdgeWeight(peg1, peg2) +
-                        G2->getEdgeWeight(hole1, hole2));
+    res += (-1 << 1) & (G1->getEdgeWeight(peg1, peg2) + G2->getEdgeWeight(hole1, hole2));
 #else
     if                 (G1->hasEdge(peg1, peg2) and G2->hasEdge(hole1, hole2)) res += 2;
     if(G1->directed) if(G1->hasEdge(peg2, peg1) and G2->hasEdge(hole2, hole1)) res += 2;

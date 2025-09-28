@@ -60,28 +60,21 @@ double EdgeGeoMean::getIncChangeOp(const uint peg, const uint oldHole, const uin
 }
 
 double EdgeGeoMean::computeIncChangeOp(const uint peg, const uint oldHole, const uint newHole, const Alignment &A) {
-    assert(A[peg] == oldHole);
     double diff=0;
-    for(const auto& nbr : *(G1->getAdjList(peg))) {
-	if(nbr == peg) assert(A[nbr] == oldHole);
-	if(G2->hasEdge(oldHole, A[nbr]))
-	    diff -= getEdgeScore(G1->getEdgeWeight(peg, nbr), G2->getEdgeWeight(oldHole, A[nbr]));
+    if (G1->hasSelfLoop(peg)) {
+        if (G2->hasSelfLoop(oldHole)) diff-=getEdgeScore(G1->getEdgeWeight(peg,peg), G2->getEdgeWeight(oldHole, oldHole));
+        if (G2->hasSelfLoop(newHole)) diff+=getEdgeScore(G1->getEdgeWeight(peg,peg), G2->getEdgeWeight(newHole, newHole));
+    }
+    for(const auto& nbr : *(G1->getAdjList(peg))) if(nbr!=peg) {
+	diff -= getEdgeScore(G1->getEdgeWeight(peg, nbr), G2->getEdgeWeight(oldHole, A[nbr]));
 	// NOTE: if the PEG has a self-loop, then moving it to newHole means we need to check for underlying self-loop at
 	// newHole; otherwise the underlying edge is between newHole and the (non-self) neighbor's aligned hole.
-        uint nbrHole = (nbr == peg) ? newHole : A[nbr];
-	if(G2->hasEdge(newHole, nbrHole))
-	    diff += getEdgeScore(G1->getEdgeWeight(peg, nbr), G2->getEdgeWeight(newHole, nbrHole));
+	diff += getEdgeScore(G1->getEdgeWeight(peg, nbr), G2->getEdgeWeight(newHole, A[nbr]));
     }
 
-    if (G1->directed) {
-        for (const auto& nbr : *(G1->getInjList(peg))) {
-            if(nbr == peg) assert(A[nbr] == oldHole);
-	    if(G2->hasEdge(A[nbr],oldHole))
-		diff -= getEdgeScore(G1->getEdgeWeight(nbr, peg), G2->getEdgeWeight(A[nbr],oldHole));
-            uint nbrHole = (nbr == peg) ? newHole : A[nbr];
-	    if(G2->hasEdge(nbrHole, newHole))
-		diff += getEdgeScore(G1->getEdgeWeight(nbr, peg), G2->getEdgeWeight(nbrHole, newHole));
-        }
+    if (G1->directed) for (const auto& nbr : *(G1->getInjList(peg))) if(nbr != peg) {
+	diff -= getEdgeScore(G1->getEdgeWeight(nbr, peg), G2->getEdgeWeight(A[nbr],oldHole));
+	diff += getEdgeScore(G1->getEdgeWeight(nbr, peg), G2->getEdgeWeight(A[nbr],newHole));
     }
     return diff;
 }
@@ -99,56 +92,32 @@ double EdgeGeoMean::computeIncSwapOp(const uint peg1, const uint peg2, const uin
     assert(peg1 != peg2);
     assert(A[peg1] == hole1 && A[peg2] == hole2);
     double diff=0;
-
-    // Subtract (peg1->hole1), add (peg1->hole2)
-    uint nbrHole;
-    for (const auto& nbr : *(G1->getAdjList(peg1))) {
-	if(nbr == peg1) assert(A[nbr] == hole1);
-        if(G2->hasEdge(hole1,A[nbr]))
-	    diff -= getEdgeScore(G1->getEdgeWeight(peg1,nbr), G2->getEdgeWeight(hole1,A[nbr]));
-        if(nbr == peg1)    nbrHole=hole2;
-        else if(nbr==peg2) nbrHole=hole1;
-        else               nbrHole=A[nbr];
-        if(G2->hasEdge(hole2,nbrHole))
-	    diff += getEdgeScore(G1->getEdgeWeight(peg1,nbr), G2->getEdgeWeight(hole2,nbrHole));
+    if (G1->hasSelfLoop(peg1)) {
+	double p1s = G1->getEdgeWeight(peg1,peg1);
+        if (G2->hasSelfLoop(hole1)) diff-=getEdgeScore(p1s, G2->getEdgeWeight(hole1, hole1));
+        if (G2->hasSelfLoop(hole2)) diff+=getEdgeScore(p1s, G2->getEdgeWeight(hole2, hole2));
+    }
+    for (const auto& nbr : *(G1->getAdjList(peg1))) if(nbr != peg1) {
+	diff -= getEdgeScore(G1->getEdgeWeight(peg1,nbr), G2->getEdgeWeight(hole1,A[nbr]));
+	diff += getEdgeScore(G1->getEdgeWeight(peg1,nbr), G2->getEdgeWeight(hole2,A[nbr]));
+    }
+    if(G1->directed) for (const auto& nbr : *(G1->getInjList(peg1))) if(nbr!=peg1) {
+	diff -= getEdgeScore(G1->getEdgeWeight(nbr, peg1), G2->getEdgeWeight(A[nbr], hole1));
+	diff += getEdgeScore(G1->getEdgeWeight(nbr, peg1), G2->getEdgeWeight(A[nbr], hole2));
     }
 
-    if(G1->directed) {
-        for (const auto& nbr : *(G1->getInjList(peg1))) { // skip the self and peg2 outgoing
-            if(nbr == peg1) assert(A[nbr] == hole1);
-            if(nbr != peg1 && nbr!=peg2) {
-                if(G2->hasEdge(A[nbr], hole1))
-		    diff -= getEdgeScore(G1->getEdgeWeight(nbr, peg1), G2->getEdgeWeight(A[nbr], hole1));
-                nbrHole=A[nbr];
-                if(G2->hasEdge(nbrHole, hole2))
-		    diff += getEdgeScore(G1->getEdgeWeight(nbr, peg1), G2->getEdgeWeight(nbrHole, hole2));
-            }
-        }
+    if (G1->hasSelfLoop(peg2)) {
+	double p2s = G1->getEdgeWeight(peg2,peg2);
+        if (G2->hasSelfLoop(hole2)) diff-=getEdgeScore(p2s, G2->getEdgeWeight(hole2, hole2));
+        if (G2->hasSelfLoop(hole1)) diff+=getEdgeScore(p2s, G2->getEdgeWeight(hole1, hole1));
     }
-
-   // Subtract peg2-hole2, add peg2-hole1
-   for (const auto& nbr : *(G1->getAdjList(peg2))) {
-	if(nbr == peg2) assert(A[nbr] == hole2);
-        if(G2->hasEdge(hole2,A[nbr]))
-	    diff -= getEdgeScore(G1->getEdgeWeight(peg2,nbr), G2->getEdgeWeight(hole2,A[nbr]));
-        if(nbr == peg2)    nbrHole=hole1;
-        else if(nbr==peg1) nbrHole=hole2;
-        else               nbrHole=A[nbr];
-        if(G2->hasEdge(hole1,nbrHole))
-	    diff += getEdgeScore(G1->getEdgeWeight(peg2,nbr), G2->getEdgeWeight(hole1,nbrHole));
+    for (const auto& nbr : *(G1->getAdjList(peg2))) if(nbr!=peg2) {
+	diff -= getEdgeScore(G1->getEdgeWeight(peg2,nbr), G2->getEdgeWeight(hole2,A[nbr]));
+	diff += getEdgeScore(G1->getEdgeWeight(peg2,nbr), G2->getEdgeWeight(hole1,A[nbr]));
     }
-
-    if(G1->directed) {
-        for (const auto& nbr : *(G1->getInjList(peg2))) {
-            if(nbr == peg2) assert(A[nbr] == hole2);
-            if(nbr != peg2 && nbr!=peg1) {
-                if(G2->hasEdge(A[nbr],hole2))
-		    diff -= getEdgeScore(G1->getEdgeWeight(nbr,peg2), G2->getEdgeWeight(A[nbr],hole2));
-                nbrHole=A[nbr];
-                if(G2->hasEdge(nbrHole,hole1))
-		    diff += getEdgeScore(G1->getEdgeWeight(nbr,peg2), G2->getEdgeWeight(nbrHole,hole1));
-            }
-        }
+    if(G1->directed) for (const auto& nbr : *(G1->getInjList(peg2))) if(nbr!=peg2) {
+	diff -= getEdgeScore(G1->getEdgeWeight(nbr,peg2), G2->getEdgeWeight(A[nbr],hole2));
+	diff += getEdgeScore(G1->getEdgeWeight(nbr,peg2), G2->getEdgeWeight(A[nbr],hole1));
     }
     return diff;
 }
