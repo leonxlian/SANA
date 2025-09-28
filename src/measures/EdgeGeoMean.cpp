@@ -11,7 +11,7 @@ EdgeGeoMean::EdgeGeoMean(const Graph* G1, const Graph* G2): Measure(G1, G2, "egm
     EdgeGeoMean::G1=G1;
     EdgeGeoMean::G2=G2;
     EdgeGeoMean::denominator = computeDenom(G1,G2);
-    std::cerr << "Computed denominator: " << EdgeGeoMean::denominator << std::endl;
+    std::cerr << "Computed EdgeGeoMean denominator: " << EdgeGeoMean::denominator << std::endl;
 }
 
 EdgeGeoMean::~EdgeGeoMean() {
@@ -23,8 +23,8 @@ double EdgeGeoMean::eval(const Alignment& A) {
 
 double EdgeGeoMean::getEdgeScore(EDGE_T w1, EDGE_T w2) {
     //assert(w1 > 0 && w2 > 0); // for FlyWire, edges are positive
-    double sgn = w1*w2>=0 ? 1:-1;
-    double numer = sgn * sqrt(abs(w1*w2));
+    double sgn = w1*(double)w2>=0 ? 1:-1;
+    double numer = sgn * sqrt(abs(w1*(double)w2));
     if(denominator) return numer/denominator;
     else return numer;
 }
@@ -59,15 +59,29 @@ double EdgeGeoMean::getIncChangeOp(const uint peg, const uint oldHole, const uin
     return val;
 }
 
-double EdgeGeoMean::computeIncChangeOp(uint peg, uint oldHole, uint newHole, const Alignment &A) {
-    double diff = 0;
-    for (uint nbr : *(G1->getAdjList(peg))) {
+double EdgeGeoMean::computeIncChangeOp(const uint peg, const uint oldHole, const uint newHole, const Alignment &A) {
+    assert(A[peg] == oldHole);
+    double diff=0;
+    for(const auto& nbr : *(G1->getAdjList(peg))) {
+	if(nbr == peg) assert(A[nbr] == oldHole);
 	if(G2->hasEdge(oldHole, A[nbr]))
 	    diff -= getEdgeScore(G1->getEdgeWeight(peg, nbr), G2->getEdgeWeight(oldHole, A[nbr]));
-
-        uint nbrHole = nbr == peg ? newHole : A[nbr];
+	// NOTE: if the PEG has a self-loop, then moving it to newHole means we need to check for underlying self-loop at
+	// newHole; otherwise the underlying edge is between newHole and the (non-self) neighbor's aligned hole.
+        uint nbrHole = (nbr == peg) ? newHole : A[nbr];
 	if(G2->hasEdge(newHole, nbrHole))
 	    diff += getEdgeScore(G1->getEdgeWeight(peg, nbr), G2->getEdgeWeight(newHole, nbrHole));
+    }
+
+    if (G1->directed) {
+        for (const auto& nbr : *(G1->getInjList(peg))) {
+            if(nbr == peg) assert(A[nbr] == oldHole);
+	    if(G2->hasEdge(A[nbr],oldHole))
+		diff -= getEdgeScore(G1->getEdgeWeight(nbr, peg), G2->getEdgeWeight(A[nbr],oldHole));
+            uint nbrHole = (nbr == peg) ? newHole : A[nbr];
+	    if(G2->hasEdge(nbrHole, newHole))
+		diff += getEdgeScore(G1->getEdgeWeight(nbr, peg), G2->getEdgeWeight(nbrHole, newHole));
+        }
     }
     return diff;
 }
@@ -80,35 +94,61 @@ double EdgeGeoMean::getIncSwapOp(const uint peg1, const uint peg2, const uint ho
  * We can first handle peg1, then do the same with peg2
  * Subtract old edge value with edge (peg1, hole1)
  * Add new edge value with edge (peg1, hole2) */
-double EdgeGeoMean::computeIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2, const Alignment &A) {
-    if (peg1 == peg2) return 0;
-    // Handle peg1
-    double diff = 0;
-    double c = 0;
-    for (uint nbr : *(G1->getAdjList(peg1))) {
-        if(G2->hasEdge(hole1, A[nbr]))
-	    diff -= getEdgeScore(G1->getEdgeWeight(peg1, nbr), G2->getEdgeWeight(hole1, A[nbr]));
+double EdgeGeoMean::computeIncSwapOp(const uint peg1, const uint peg2, const uint hole1, const uint hole2, const Alignment &A)
+{
+    assert(peg1 != peg2);
+    assert(A[peg1] == hole1 && A[peg2] == hole2);
+    double diff=0;
 
-        // Determine the new target hole for nbr
-        uint nbrHole = 0;
-        if (nbr == peg1) nbrHole = hole2;
-        else if (nbr == peg2) nbrHole = hole1;
-        else nbrHole = A[nbr];
-
-        if(G2->hasEdge(hole2, nbrHole))
-	    diff += getEdgeScore(G1->getEdgeWeight(peg1, nbr), G2->getEdgeWeight(hole2, nbrHole));
+    // Subtract (peg1->hole1), add (peg1->hole2)
+    uint nbrHole;
+    for (const auto& nbr : *(G1->getAdjList(peg1))) {
+	if(nbr == peg1) assert(A[nbr] == hole1);
+        if(G2->hasEdge(hole1,A[nbr]))
+	    diff -= getEdgeScore(G1->getEdgeWeight(peg1,nbr), G2->getEdgeWeight(hole1,A[nbr]));
+        if(nbr == peg1)    nbrHole=hole2;
+        else if(nbr==peg2) nbrHole=hole1;
+        else               nbrHole=A[nbr];
+        if(G2->hasEdge(hole2,nbrHole))
+	    diff += getEdgeScore(G1->getEdgeWeight(peg1,nbr), G2->getEdgeWeight(hole2,nbrHole));
     }
-    // Handle peg2
-    for (uint nbr : *(G1->getAdjList(peg2))) {
-        if (nbr == peg1) continue;
-        if(G2->hasEdge(hole2, A[nbr]))
-	    diff -= getEdgeScore(G1->getEdgeWeight(peg2, nbr), G2->getEdgeWeight(hole2, A[nbr]));
 
-        uint nbrHole = (nbr == peg2 ? hole1 : A[nbr]);
-        if(G2->hasEdge(hole1, nbrHole))
-	    diff += getEdgeScore(G1->getEdgeWeight(peg2, nbr), G2->getEdgeWeight(hole1, nbrHole));
+    if(G1->directed) {
+        for (const auto& nbr : *(G1->getInjList(peg1))) { // skip the self and peg2 outgoing
+            if(nbr == peg1) assert(A[nbr] == hole1);
+            if(nbr != peg1 && nbr!=peg2) {
+                if(G2->hasEdge(A[nbr], hole1))
+		    diff -= getEdgeScore(G1->getEdgeWeight(nbr, peg1), G2->getEdgeWeight(A[nbr], hole1));
+                nbrHole=A[nbr];
+                if(G2->hasEdge(nbrHole, hole2))
+		    diff += getEdgeScore(G1->getEdgeWeight(nbr, peg1), G2->getEdgeWeight(nbrHole, hole2));
+            }
+        }
+    }
+
+   // Subtract peg2-hole2, add peg2-hole1
+   for (const auto& nbr : *(G1->getAdjList(peg2))) {
+	if(nbr == peg2) assert(A[nbr] == hole2);
+        if(G2->hasEdge(hole2,A[nbr]))
+	    diff -= getEdgeScore(G1->getEdgeWeight(peg2,nbr), G2->getEdgeWeight(hole2,A[nbr]));
+        if(nbr == peg2)    nbrHole=hole1;
+        else if(nbr==peg1) nbrHole=hole2;
+        else               nbrHole=A[nbr];
+        if(G2->hasEdge(hole1,nbrHole))
+	    diff += getEdgeScore(G1->getEdgeWeight(peg2,nbr), G2->getEdgeWeight(hole1,nbrHole));
+    }
+
+    if(G1->directed) {
+        for (const auto& nbr : *(G1->getInjList(peg2))) {
+            if(nbr == peg2) assert(A[nbr] == hole2);
+            if(nbr != peg2 && nbr!=peg1) {
+                if(G2->hasEdge(A[nbr],hole2))
+		    diff -= getEdgeScore(G1->getEdgeWeight(nbr,peg2), G2->getEdgeWeight(A[nbr],hole2));
+                nbrHole=A[nbr];
+                if(G2->hasEdge(nbrHole,hole1))
+		    diff += getEdgeScore(G1->getEdgeWeight(nbr,peg2), G2->getEdgeWeight(nbrHole,hole1));
+            }
+        }
     }
     return diff;
 }
-
-

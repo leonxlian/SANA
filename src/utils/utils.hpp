@@ -15,8 +15,15 @@ using namespace std;
 extern const string AUTOGENEREATED_FILES_FOLDER;
 extern const char *SANAversion;
 
+#if 1 // __APPLE__ || __MACOS__
+typedef unsigned char uchar;
+typedef unsigned short ushort;
+typedef unsigned int uint;
+typedef unsigned long ulong;
+#elif
 typedef uint16_t ushort;
 typedef uint32_t uint;
+#endif
 
 bool myNan(double x);
 

@@ -16,13 +16,6 @@
 class Alignment;
 #endif
 
-#if __APPLE__ || __MACOS__
-typedef unsigned char uchar;
-typedef unsigned short ushort;
-typedef unsigned int uint;
-typedef unsigned long ulong;
-#endif
-
 using namespace std;
 
 //EDGE_T: macro specifying the type of the edge weights

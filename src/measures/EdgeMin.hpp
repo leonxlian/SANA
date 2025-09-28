@@ -2,8 +2,6 @@
 #define EDGEMIN_HPP
 #include "Measure.hpp"
 
-#define DEBUG_EDGEMIN 0
-
 class EdgeMin: public Measure {
 public:
     EdgeMin(const Graph* G1, const Graph* G2);

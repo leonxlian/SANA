@@ -45,11 +45,6 @@
 
 using namespace std;
 
-#define DEBUG_EDGEMIN 0
-#if DEBUG_EDGEMIN
-static double _predictedScore1, _predictedScore2;
-#endif
-
 // Stuff for MAX_STATIONARY
 #define MAX_ST_INVALID 65535 // just in case int is 16 bits
 static uint MAX_STATIONARY = MAX_ST_INVALID, _numNonstationaryColors, *_pickArrayNum;
@@ -312,7 +307,7 @@ void SANA::initDataStructures() {
     if (needEd) edSum = EdgeDifference::getEdgeDifferenceSum(G1, G2, alig);
     if (needEr) erSum = EdgeRatio::getSum(alig);
     if (needEgm) egmSum = EdgeGeoMean::getEdgeGeoMeanSum(G1, G2, alig);
-    if (needEmin) eminSum = ((EdgeMin*) MC->getMeasure("emin"))->eval(alig);
+    if (needEmin) eminSum = ((EdgeMin*    ) MC->getMeasure("emin"))->eval(alig);
     if (needSquaredAligEdges) squaredAligEdges =
             ((SquaredEdgeScore*) MC->getMeasure("ses"))->numSquaredAlignedEdges(alig);
     if (needExposedEdges) EdgeExposure::numer =
@@ -460,17 +455,6 @@ Alignment SANA::runUsingConfidenceIntervals() {
 
 	    //currentScore = eval(A);
 	    SANAIteration();
-#if DEBUG_EDGEMIN
-	    if(iterationsPerformed % 20000 == 20000) {
-		double correct = eval(A);
-		printf("."); fflush(stdout);
-		if(fabs(currentScore - correct) > 4e-16) {
-		    printf("iter %u currentScore %g; correct %g; diff %g\n", iterationsPerformed,
-			currentScore, correct, currentScore-correct); //_predictedScore1, _predictedScore2, diff1,diff2);
-		    //currentScore = correct;
-		}
-	    }
-#endif
 	    StatAddSample(scoreBatch, currentScore);
 	    StatAddSample(pBadBatch, movePbad);
 	    if(StatNumSamples(scoreBatch) == batchSize) {
@@ -898,6 +882,7 @@ void SANA::performChange(uint actColId) {
         aligEdges                     = newAligEdges;
         edSum                         = newEdSum;
         erSum                         = newErSum;
+        egmSum                        = newEgmSum;
         eminSum                       = newEminSum;
         inducedEdges                  = newInducedEdges;
         localScoreSum                 = newLocalScoreSum;
@@ -1037,6 +1022,7 @@ void SANA::performSwap(uint actColId) {
 	aligEdges           = newAligEdges;
 	edSum               = newEdSum;
 	erSum               = newErSum;
+	egmSum              = newEgmSum;
 	eminSum             = newEminSum;
 	localScoreSum       = newLocalScoreSum;
 	wecSum              = newWecSum;

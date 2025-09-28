@@ -13,6 +13,7 @@ EdgeRatio::EdgeRatio(const Graph* G1, const Graph* G2): Measure(G1, G2, "er") {
     EdgeRatio::G1=G1;
     EdgeRatio::G2=G2;
     EdgeRatio::denominator=computeDenom();
+    std::cerr << "Computed EdgeRatio denominator: " << EdgeRatio::denominator << std::endl;
 }
 EdgeRatio::~EdgeRatio() {}
 
