@@ -784,11 +784,12 @@ void SANA::performChange(uint actColId) {
         do {
 	    unassignedVecIndex = randInt(0, numUnassigWithCol-1);
 	    newHole = actColToUnassignedG2Nodes[actColId][unassignedVecIndex];
+	    // FIXME: it would be better to keep & update the set of unhappy holes, so picking one is O(1).
         } while(isHappyHole(newHole));
-	assert(A_[newHole]==G1->getNumNodes());
+	assert(A_[newHole]==G1->getNumNodes()); // ensure it's unassigned
 	if(alignment.allowedPegs(newHole).size() == 0) // if no partners exist, pick a random UNHAPPY peg
             do peg = randomG1NodeWithActiveColor(actColId, true);
-            while(isHappyPeg(peg));
+            while(isHappyPeg(peg)); // again, keep + update unhappy list so picking one is O(1)
         else {
             unordered_set<uint> myUnhappyPegs;
             for(const auto p : alignment.allowedPegs(newHole))
@@ -938,7 +939,7 @@ void SANA::performSwap(uint actColId) {
 		    uint randIndex = h2s * randomReal(gen);
 		    auto it = alignment.allowedPegs(hole2).begin(); std::advance(it, randIndex);
 		    peg1 = *it;
-		} while(peg1==peg2);
+		} while(peg1==peg2); // this should be rare, so expected number of while iterations is 1+epsilon
             }
         }
         assert(peg1 < G1->getNumNodes());
