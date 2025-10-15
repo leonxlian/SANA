@@ -1251,6 +1251,10 @@ double SANA::scoreComparison(double newAligEdges, double newInducedEdges, double
     return (movePbad = pBad);
 }
 
+// Leon: remove the following two functions and put them into the Measure::EdgeCorrectness class, and CALL them, and
+// then set MEASURE_CLASS_COMPLETE to 1 to test.
+#define MEASURE_CLASS_COMPLETE 0
+#if !MEASURE_CLASS_COMPLETE
 int SANA::aligEdgesIncChangeOp(uint peg, uint oldHole, uint newHole) {
     int res = 0;
     if (G1->hasSelfLoop(peg)) {
@@ -1311,7 +1315,7 @@ int SANA::aligEdgesIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2) {
     return res;
 #endif // WEIGHT
 }
-
+#endif
 
 // UGLY GORY HACK BELOW!! Sometimes the edgeVal is crazily wrong, like way above 1,000, when it
 // cannot possibly be greater than the number of networks we're aligning when MULTI_PAIRWISE is on.
