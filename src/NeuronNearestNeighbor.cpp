@@ -11,11 +11,6 @@
 
 #include <unistd.h>
 
-#define USAGE_MSG "NeuronNearestNeighbor [-o OUTFILE] -t TARGET_PATH | -q QUERY_PATH\n"\
-                  "\n  -t TARGET_PATH   Path to the source SWC."\
-                  "\n  -q QUERY_PATH    Path to the query SWC."\
-                  "\n  -h               Prints the usage statement to STDOUT. All other arguments are ignored.\n"
-
 constexpr int MIN_LINE_LEN = 34;
 constexpr int POINT_DEFAULT_PARENT = -1;
 constexpr int POINT_DEFAULT_ID = -1;
@@ -140,14 +135,12 @@ int load_points(const std::string& filepath, std::vector<point>& vec)
     return 0;
 }
 
+// Just to be obtuse, p = query, q = target
 void nearest_neighbor(const std::vector<point>& p, const std::vector<point>& q)
 {
     for (const auto& p_i : p)
     {
-        if (p_i.parent == POINT_DEFAULT_PARENT)
-        {
-            continue;
-        }
+        if (p_i.parent == POINT_DEFAULT_PARENT) continue;
         const point& p_j = p[p_i.parent];
         point r_i = p_j - p_i;
         point m_i = p_i + 0.5 * r_i;
@@ -156,10 +149,7 @@ void nearest_neighbor(const std::vector<point>& p, const std::vector<point>& q)
         double norm_dot_prod_min = 0;
         for (const auto& q_i : q)
         {
-            if (q_i.parent == -1)
-            {
-                continue;
-            }
+            if (q_i.parent == -1) continue;
             const point& q_j = q[q_i.parent];
             point s_i = q_j - q_i;
             point o_i = q_i + 0.5 * s_i;
@@ -172,10 +162,7 @@ void nearest_neighbor(const std::vector<point>& p, const std::vector<point>& q)
                 d_min = d_i;
                 double r_magnitude = r_i.magnitude();
                 double s_magnitude = s_i.magnitude();
-                if (r_magnitude == 0 || s_magnitude == 0)
-                {
-                    continue;
-                }
+                if (r_magnitude == 0 || s_magnitude == 0) continue;
                 norm_dot_prod_min = std::abs(dot(r_i, s_i)) / (r_magnitude * s_magnitude);
             }
         }
@@ -184,57 +171,28 @@ void nearest_neighbor(const std::vector<point>& p, const std::vector<point>& q)
     std::cout.flush();
 }
 
+#define USAGE_MSG "USAGE: NeuronNearestNeighbor query.swc target1.swc [more targets]\n"
+
 int main(int argc, char *argv[])
 {
     int opt, rc;
     std::string target_filepath, query_filepath;
 
-    while ((opt = getopt(argc, argv, ":t:q:h")) != -1)
-    {
-        switch (opt)
-        {
-            case 't':
-            {
-                target_filepath = optarg;
-                break;
-            }
-            case 'q':
-            {
-                query_filepath = optarg;
-                break;
-            }
-            case 'h':
-            {
-                std::cout << USAGE_MSG;
-                return EXIT_SUCCESS;
-            }
-            default:
-            {
-                std::cerr << USAGE_MSG;
-                return EXIT_FAILURE;
-            }
-        }
-    }
+    if(argc<3) {std::cerr << USAGE_MSG; return EXIT_FAILURE;}
 
-    if (target_filepath.empty() || query_filepath.empty()) 
-    {
-        std::cerr << "Error: both -t and -q must be provided.\n";
-        return EXIT_FAILURE;
-    }
-
-    std::vector<point> target_v;
-    rc = load_points(target_filepath, target_v);
-    if (rc)
-    {
-        return rc;
-    }
-
+    query_filepath = argv[1];
+    if (query_filepath.empty()) { std::cerr << USAGE_MSG; return EXIT_FAILURE;}
     std::vector<point> query_v;
     rc = load_points(query_filepath, query_v);
-    if (rc)
-    {
-        return rc;
-    }
+    if (rc) return rc;
 
-    nearest_neighbor(target_v, query_v);
+    for(int i=2;i<argc;i++) {
+	target_filepath = argv[i];
+	if (target_filepath.empty()) {std::cerr << "can't open " << target_filepath << "; continuing\n"; continue;}
+	std::vector<point> target_v;
+	rc = load_points(target_filepath, target_v);
+	if (rc) {std::cerr << "failed to load points from " << target_filepath << "; continuing\n"; continue;}
+        std::cout << query_filepath << " " << target_filepath << "\n";
+	nearest_neighbor(query_v, target_v);
+    }
 }
