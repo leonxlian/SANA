@@ -9,7 +9,11 @@
 #include <memory>
 #include <iomanip>
 
+
+// C-based includes
 #include <unistd.h>
+#include <cstring>
+#include <cassert>
 
 constexpr int MIN_LINE_LEN = 34;
 constexpr int POINT_DEFAULT_PARENT = -1;
@@ -135,7 +139,7 @@ int load_points(const std::string& filepath, std::vector<point>& vec)
     return 0;
 }
 
-// Just to be obtuse, p = query, q = target
+// NATHAN: please name the first argument query (or q) and the second one target (or t)
 void nearest_neighbor(const std::vector<point>& p, const std::vector<point>& q)
 {
     for (const auto& p_i : p)
@@ -163,15 +167,18 @@ void nearest_neighbor(const std::vector<point>& p, const std::vector<point>& q)
                 double r_magnitude = r_i.magnitude();
                 double s_magnitude = s_i.magnitude();
                 if (r_magnitude == 0 || s_magnitude == 0) continue;
-                norm_dot_prod_min = std::abs(dot(r_i, s_i)) / (r_magnitude * s_magnitude);
+                norm_dot_prod_min = std::abs(dot(r_i, s_i) / (r_magnitude * s_magnitude));
+                if(norm_dot_prod_min>1) norm_dot_prod_min=1;
             }
         }
-        std::cout << p_i.id << " " << q_min.id << " " << d_min << " " << norm_dot_prod_min << "\n";
+        std::cout << p_i.id << " " << q_min.id << " " << d_min << " " << sin(acos(norm_dot_prod_min)) << "\n";
     }
     std::cout.flush();
 }
 
-#define USAGE_MSG "USAGE: NeuronNearestNeighbor query.swc target1.swc [more targets]\n"
+#define USAGE_MSG "USAGE: ./nblast ... followed by one of the following:\n"\
+"    query.swc [ list of target.swc's ] |\n"\
+"    -r [list of swc files] # produce random pairs, ad infinitum\n";
 
 int main(int argc, char *argv[])
 {
@@ -180,19 +187,45 @@ int main(int argc, char *argv[])
 
     if(argc<3) {std::cerr << USAGE_MSG; return EXIT_FAILURE;}
 
-    query_filepath = argv[1];
-    if (query_filepath.empty()) { std::cerr << USAGE_MSG; return EXIT_FAILURE;}
-    std::vector<point> query_v;
-    rc = load_points(query_filepath, query_v);
-    if (rc) return rc;
+    int argn=1; // index to the next, as-yet-unparsed argument
 
-    for(int i=2;i<argc;i++) {
-	target_filepath = argv[i];
-	if (target_filepath.empty()) {std::cerr << "can't open " << target_filepath << "; continuing\n"; continue;}
-	std::vector<point> target_v;
-	rc = load_points(target_filepath, target_v);
-	if (rc) {std::cerr << "failed to load points from " << target_filepath << "; continuing\n"; continue;}
-        std::cout << query_filepath << " " << target_filepath << "\n";
-	nearest_neighbor(query_v, target_v);
+    // NATHAN: feel free to put the optarg() stuff back again... we may be adding more options in the future...
+    if(strcmp(argv[argn],"-r")==0) { // random pairs, ad infinitum
+	++argn;
+	int n = argc - argn; // number of input SWC files, from which random pairs will be chosen
+	srand48(time(0)+getpid()); // seed the random number generator
+	while(1) {
+	    int i = argn+n*drand48(), j = argn+n*drand48();
+
+	    query_filepath = argv[i];
+	    std::vector<point> query_v;
+	    rc = load_points(query_filepath, query_v);
+	    assert(rc==0);
+
+	    target_filepath = argv[j];
+	    std::vector<point> target_v;
+	    rc = load_points(target_filepath, target_v);
+	    assert(rc==0);
+
+	    // NATHAN: it would be good to strip off the ".swc" from the end of the names before printing them
+	    std::cout << query_filepath << " " << target_filepath << "\n";
+	    nearest_neighbor(query_v, target_v);
+	}
+    } else {
+	query_filepath = argv[1];
+	if (query_filepath.empty()) { std::cerr << USAGE_MSG; return EXIT_FAILURE;}
+	std::vector<point> query_v;
+	rc = load_points(query_filepath, query_v);
+	if (rc) return rc;
+
+	for(int i=2;i<argc;i++) {
+	    target_filepath = argv[i];
+	    if (target_filepath.empty()) {std::cerr << "can't open " << target_filepath << "; continuing\n"; continue;}
+	    std::vector<point> target_v;
+	    rc = load_points(target_filepath, target_v);
+	    if (rc) {std::cerr << "failed to load points from " << target_filepath << "; continuing\n"; continue;}
+	    std::cout << query_filepath << " " << target_filepath << "\n";
+	    nearest_neighbor(query_v, target_v);
+	}
     }
 }
