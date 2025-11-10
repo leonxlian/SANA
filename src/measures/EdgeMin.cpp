@@ -12,17 +12,19 @@ EdgeMin::~EdgeMin() {
 }
 
 double EdgeMin::computeDenom() {
-    // NOTE: getTotalEdgeWeight doesn't work because, if the edges are signed, the result is close to zero.
-    // double val = min(G1->getTotalEdgeWeight(), G2->getTotalEdgeWeight());
+    // NOTE: EdgeMin only works with unsigned integer edge weights
+    // Use: make 'EDGE_T=unsigned' to compile for EdgeMin
     double ew, sumG1=0, sumG2=0;
 
     // Sum edge weights of both graphs
     for (const auto& edge : *(G1->getEdgeList())) {
 	ew = G1->getEdgeWeight(edge[0], edge[1]);
+	assert(ew == (unsigned long int)ew && "EdgeMin requires unsigned integer edge weights");
 	sumG1 += ew;
     }
     for (const auto& edge : *(G2->getEdgeList())) {
 	ew = G2->getEdgeWeight(edge[0], edge[1]);
+	assert(ew == (unsigned long int)ew && "EdgeMin requires unsigned integer edge weights");
 	sumG2 += ew;
     }
 
@@ -30,12 +32,9 @@ double EdgeMin::computeDenom() {
 }
 
 double EdgeMin::getEdgeScore(double w1, double w2) {
-    static bool warned;
-    if(!warned && (w1<0 || w2<0)) {
-        if(w1<0) cerr << "WARNING: EdgeMin really doesn't make sense with negative edge (eg., " << w1 << ")\n";
-        if(w2<0) cerr << "WARNING: EdgeMin really doesn't make sense with negative edge (eg., " << w2 << ")\n";
-        warned=true;
-    }
+    // EdgeMin requires unsigned integer edge weights
+    assert(w1 == (unsigned long int)w1 && "EdgeMin requires unsigned integer edge weights (compile with EDGE_T=unsigned)");
+    assert(w2 == (unsigned long int)w2 && "EdgeMin requires unsigned integer edge weights (compile with EDGE_T=unsigned)");
     return std::min(w1, w2) / denominator;
 }
 
