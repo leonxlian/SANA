@@ -13,18 +13,16 @@ EdgeMin::~EdgeMin() {
 
 double EdgeMin::computeDenom() {
     // NOTE: EdgeMin only works with unsigned integer edge weights
-    // Use: make 'EDGE_T=unsigned' to compile for EdgeMin
+    // Assertion is deferred to getEdgeScore() which is only called when EdgeMin is actually used
     double ew, sumG1=0, sumG2=0;
 
     // Sum edge weights of both graphs
     for (const auto& edge : *(G1->getEdgeList())) {
 	ew = G1->getEdgeWeight(edge[0], edge[1]);
-	assert(ew == (unsigned long int)ew && "EdgeMin requires unsigned integer edge weights");
 	sumG1 += ew;
     }
     for (const auto& edge : *(G2->getEdgeList())) {
 	ew = G2->getEdgeWeight(edge[0], edge[1]);
-	assert(ew == (unsigned long int)ew && "EdgeMin requires unsigned integer edge weights");
 	sumG2 += ew;
     }
 
