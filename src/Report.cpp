@@ -70,49 +70,49 @@ void Report::saveReport(const Graph& G1, const Graph& G2, const Alignment& A,
     }
     cout << "Writing scores done (" << T2.elapsedString() << ")" << endl;
         
-    Timer T3;
-    T3.start();  
-    ofs << "Common subgraph:" << endl;
-    Graph CS = G1.graphIntersection(G2, A.asVector());
-    printGraphStats(CS, numCCsToPrint, ofs);
-    auto CCs = CS.connectedComponents();
-    uint numCCs = CCs.size();
-    int tableRows = numCCs+2; // min((uint) 5, numCCs)+2;
-    vector<vector<string>> table(tableRows, vector<string> (9));
-    table[0][0] = "Graph"; table[0][1] = "n"; table[0][2] = "m"; table[0][3] = "alig-edges";
-    table[0][4] = "indu-edges"; table[0][5] = "EC";
-    table[0][6] = "ICS"; table[0][7] = "S3"; table[0][8] = "JS";
-
-    table[1][0] = "G1"; table[1][1] = to_string(G1.getNumNodes()); table[1][2] = to_string(G1.getNumEdges());
-    table[1][3] = to_string(A.computeNumAlignedEdges(G1, G2)); table[1][4] = to_string(G2.numEdgesInNodeInducedSubgraph(A.asVector()));
-    table[1][5] = to_string(M.eval("ec",A));
-    table[1][6] = to_string(M.eval("ics",A)); table[1][7] = to_string(M.eval("s3",A)); table[1][8] = to_string(M.eval("js", A));
-
-    for (int i = 0; i < tableRows-2; i++) {
-        Graph H = CS.nodeInducedSubgraph(CCs[i]);
-        Alignment newA(CCs[i]);
-        newA.compose(A);
-        table[i+2][0] = "CCS_"+to_string(i); table[i+2][1] = to_string(H.getNumNodes());
-        table[i+2][2] = to_string(H.getNumEdges());
-        table[i+2][3] = to_string(newA.computeNumAlignedEdges(H, G2));
-        table[i+2][4] = to_string(G2.numEdgesInNodeInducedSubgraph(newA.asVector()));
-        EdgeCorrectness ec(&H, &G2, 1);
-        table[i+2][5] = to_string(ec.eval(newA));
-        InducedConservedStructure ics(&H, &G2);
-        table[i+2][6] = to_string(ics.eval(newA));
-        SymmetricSubstructureScore s3(&H, &G2);
-        table[i+2][7] = to_string(s3.eval(newA));
-        JaccardSimilarityScore js(&H, &G2);
-        table[i+2][8] = to_string(js.eval(newA));
-    }
-
-    ofs << "Common connected subgraphs:" << endl;
-    printTable(table, 2, ofs);
-    ofs << endl;
-    cout << "Writing table done (" << T3.elapsedString() << ")" << endl;
-
-    const bool PRINT_CCS = true;
+    const bool PRINT_CCS = !getenv("SKIP_PRINT_CCS");
     if (PRINT_CCS) {
+	Timer T3;
+	T3.start();  
+	ofs << "Common subgraph:" << endl;
+	Graph CS = G1.graphIntersection(G2, A.asVector());
+	printGraphStats(CS, numCCsToPrint, ofs);
+	auto CCs = CS.connectedComponents();
+	uint numCCs = CCs.size();
+	int tableRows = numCCs+2; // min((uint) 5, numCCs)+2;
+	vector<vector<string>> table(tableRows, vector<string> (9));
+	table[0][0] = "Graph"; table[0][1] = "n"; table[0][2] = "m"; table[0][3] = "alig-edges";
+	table[0][4] = "indu-edges"; table[0][5] = "EC";
+	table[0][6] = "ICS"; table[0][7] = "S3"; table[0][8] = "JS";
+
+	table[1][0] = "G1"; table[1][1] = to_string(G1.getNumNodes()); table[1][2] = to_string(G1.getNumEdges());
+	table[1][3] = to_string(A.computeNumAlignedEdges(G1, G2)); table[1][4] = to_string(G2.numEdgesInNodeInducedSubgraph(A.asVector()));
+	table[1][5] = to_string(M.eval("ec",A));
+	table[1][6] = to_string(M.eval("ics",A)); table[1][7] = to_string(M.eval("s3",A)); table[1][8] = to_string(M.eval("js", A));
+
+	for (int i = 0; i < tableRows-2; i++) {
+	    Graph H = CS.nodeInducedSubgraph(CCs[i]);
+	    Alignment newA(CCs[i]);
+	    newA.compose(A);
+	    table[i+2][0] = "CCS_"+to_string(i); table[i+2][1] = to_string(H.getNumNodes());
+	    table[i+2][2] = to_string(H.getNumEdges());
+	    table[i+2][3] = to_string(newA.computeNumAlignedEdges(H, G2));
+	    table[i+2][4] = to_string(G2.numEdgesInNodeInducedSubgraph(newA.asVector()));
+	    EdgeCorrectness ec(&H, &G2, 1);
+	    table[i+2][5] = to_string(ec.eval(newA));
+	    InducedConservedStructure ics(&H, &G2);
+	    table[i+2][6] = to_string(ics.eval(newA));
+	    SymmetricSubstructureScore s3(&H, &G2);
+	    table[i+2][7] = to_string(s3.eval(newA));
+	    JaccardSimilarityScore js(&H, &G2);
+	    table[i+2][8] = to_string(js.eval(newA));
+	}
+
+	ofs << "Common connected subgraphs:" << endl;
+	printTable(table, 2, ofs);
+	ofs << endl;
+	cout << "Writing table done (" << T3.elapsedString() << ")" << endl;
+
         const uint EDGE_COUNT_DIST = 0;
         for (uint j=0; j < numCCs; j++) {
             ofs<<"CCS_"<<j<<" Alignment, local (distance 1 to "<<EDGE_COUNT_DIST<<") edge counts and s3 score"<<endl;
@@ -139,7 +139,8 @@ void Report::saveReport(const Graph& G1, const Graph& G2, const Alignment& A,
                 ofs << endl;
             }
         }
-    }
+    } else
+	cout<<"Skipping printing of Common Connected Subgraphs (CCSs), which can take forever\n";
     cout<<"Took "<<T.elapsed()<<" seconds to save the alignment and report."<<endl;
 }
 
@@ -319,49 +320,49 @@ void Report::reportAll(const Graph& G1, const Graph& G2, const Alignment& A,
     }
     cout << "Writing scores done (" << T2.elapsedString() << ")" << endl;
 
-    Timer T3;
-    T3.start();
-    outOfs << "Common subgraph:" << endl;
-    Graph CS = G1.graphIntersection(G2, A.asVector());
-    printGraphStats(CS, numCCsToPrint, outOfs);
-    auto CCs = CS.connectedComponents();
-    uint numCCs = CCs.size();
-    int tableRows = numCCs+2; // min((uint)5, numCCs) + 2;
-    vector<vector<string>> table(tableRows, vector<string>(9));
-    table[0][0] = "Graph"; table[0][1] = "n"; table[0][2] = "m"; table[0][3] = "alig-edges";
-    table[0][4] = "indu-edges"; table[0][5] = "EC";
-    table[0][6] = "ICS"; table[0][7] = "S3"; table[0][8] = "JS";
-
-    table[1][0] = "G1"; table[1][1] = to_string(G1.getNumNodes()); table[1][2] = to_string(G1.getNumEdges());
-    table[1][3] = to_string(A.computeNumAlignedEdges(G1, G2)); table[1][4] = to_string(G2.numEdgesInNodeInducedSubgraph(A.asVector()));
-    table[1][5] = to_string(M.eval("ec", A));
-    table[1][6] = to_string(M.eval("ics", A));table[1][7] = to_string(M.eval("s3", A));table[1][8] = to_string(M.eval("js", A));
-
-    for (int i = 0; i < tableRows - 2; i++) {
-        Graph H = CS.nodeInducedSubgraph(CCs[i]);
-        Alignment newA(CCs[i]);
-        newA.compose(A);
-        table[i+2][0] = "CCS_"+to_string(i); table[i+2][1] = to_string(H.getNumNodes());
-        table[i+2][2] = to_string(H.getNumEdges());
-        table[i+2][3] = to_string(newA.computeNumAlignedEdges(H, G2));
-        table[i+2][4] = to_string(G2.numEdgesInNodeInducedSubgraph(newA.asVector()));
-        EdgeCorrectness ec(&H, &G2, 1);
-        table[i+2][5] = to_string(ec.eval(newA));
-        InducedConservedStructure ics(&H, &G2);
-        table[i+2][6] = to_string(ics.eval(newA));
-        SymmetricSubstructureScore s3(&H, &G2);
-        table[i+2][7] = to_string(s3.eval(newA));
-        JaccardSimilarityScore js(&H, &G2);
-        table[i+2][8] = to_string(js.eval(newA));
-    }
-
-    outOfs << "Common connected subgraphs:" << endl;
-    printTable(table, 2, outOfs);
-    outOfs << endl;
-    cout << "Writing table done (" << T3.elapsedString() << ")" << endl;
-
     const bool PRINT_CCS = true;
     if (PRINT_CCS) {
+	Timer T3;
+	T3.start();
+	outOfs << "Common subgraph:" << endl;
+	Graph CS = G1.graphIntersection(G2, A.asVector());
+	printGraphStats(CS, numCCsToPrint, outOfs);
+	auto CCs = CS.connectedComponents();
+	uint numCCs = CCs.size();
+	int tableRows = numCCs+2; // min((uint)5, numCCs) + 2;
+	vector<vector<string>> table(tableRows, vector<string>(9));
+	table[0][0] = "Graph"; table[0][1] = "n"; table[0][2] = "m"; table[0][3] = "alig-edges";
+	table[0][4] = "indu-edges"; table[0][5] = "EC";
+	table[0][6] = "ICS"; table[0][7] = "S3"; table[0][8] = "JS";
+
+	table[1][0] = "G1"; table[1][1] = to_string(G1.getNumNodes()); table[1][2] = to_string(G1.getNumEdges());
+	table[1][3] = to_string(A.computeNumAlignedEdges(G1, G2)); table[1][4] = to_string(G2.numEdgesInNodeInducedSubgraph(A.asVector()));
+	table[1][5] = to_string(M.eval("ec", A));
+	table[1][6] = to_string(M.eval("ics", A));table[1][7] = to_string(M.eval("s3", A));table[1][8] = to_string(M.eval("js", A));
+
+	for (int i = 0; i < tableRows - 2; i++) {
+	    Graph H = CS.nodeInducedSubgraph(CCs[i]);
+	    Alignment newA(CCs[i]);
+	    newA.compose(A);
+	    table[i+2][0] = "CCS_"+to_string(i); table[i+2][1] = to_string(H.getNumNodes());
+	    table[i+2][2] = to_string(H.getNumEdges());
+	    table[i+2][3] = to_string(newA.computeNumAlignedEdges(H, G2));
+	    table[i+2][4] = to_string(G2.numEdgesInNodeInducedSubgraph(newA.asVector()));
+	    EdgeCorrectness ec(&H, &G2, 1);
+	    table[i+2][5] = to_string(ec.eval(newA));
+	    InducedConservedStructure ics(&H, &G2);
+	    table[i+2][6] = to_string(ics.eval(newA));
+	    SymmetricSubstructureScore s3(&H, &G2);
+	    table[i+2][7] = to_string(s3.eval(newA));
+	    JaccardSimilarityScore js(&H, &G2);
+	    table[i+2][8] = to_string(js.eval(newA));
+	}
+
+	outOfs << "Common connected subgraphs:" << endl;
+	printTable(table, 2, outOfs);
+	outOfs << endl;
+	cout << "Writing table done (" << T3.elapsedString() << ")" << endl;
+
         const uint EDGE_COUNT_DIST = 0;
         for (uint j = 0; j < numCCs; j++) {
             outOfs<<"CCS_"<<j<<" Alignment, local (distance 1 to "<<EDGE_COUNT_DIST<<") edge counts and s3 score"<<endl;
