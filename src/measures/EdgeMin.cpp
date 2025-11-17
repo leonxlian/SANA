@@ -4,6 +4,7 @@
 #include <array>
 
 EdgeMin::EdgeMin(const Graph* G1, const Graph* G2): WeightedMeasure(G1, G2, "emin") {
+    denominator = 0;
     denominator = computeDenom();
     std::cerr << "Computed EdgeMin denominator: " << denominator << std::endl;
 }

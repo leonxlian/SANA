@@ -2,19 +2,12 @@
 #include <vector>
 
 EdgeGeoMean::EdgeGeoMean(const Graph* G1, const Graph* G2): WeightedMeasure(G1, G2, "egm") {
+    denominator = 0;
     denominator = computeDenom(G1, G2);
     std::cerr << "Computed EdgeGeoMean denominator: " << denominator << std::endl;
 }
 
 EdgeGeoMean::~EdgeGeoMean() {
-}
-
-double EdgeGeoMean::getEdgeScore(double w1, double w2) {
-    //assert(w1 > 0 && w2 > 0); // for FlyWire, edges are positive
-    double sgn = w1*w2>=0 ? 1:-1;
-    double numer = sgn * sqrt(abs(w1*w2));
-    if(denominator) return numer/denominator;
-    else return numer;
 }
 
 static bool CmpEdge(double w1, double w2) { return (w1 > w2); }
@@ -29,6 +22,14 @@ double EdgeGeoMean::computeDenom(const Graph* G1, const Graph* G2) {
     unsigned minSize = min(W1.size(), W2.size());
     for(unsigned i=0; i<minSize; i++) sum += getEdgeScore(W1[i], W2[i]);
     return sum;
+}
+
+double EdgeGeoMean::getEdgeScore(double w1, double w2) {
+    //assert(w1 > 0 && w2 > 0); // for FlyWire, edges are positive
+    double sgn = w1*w2>=0 ? 1:-1;
+    double numer = sgn * sqrt(abs(w1*w2));
+    if(denominator) return numer/denominator;
+    else return numer;
 }
 
 double EdgeGeoMean::eval(const Alignment& A) {

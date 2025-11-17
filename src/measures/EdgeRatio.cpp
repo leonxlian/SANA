@@ -4,6 +4,7 @@
 #include <array>
 
 EdgeRatio::EdgeRatio(const Graph* G1, const Graph* G2): WeightedMeasure(G1, G2, "er") {
+    denominator = 0;
     denominator = computeDenom();
     std::cerr << "Computed EdgeRatio denominator: " << denominator << std::endl;
 }
