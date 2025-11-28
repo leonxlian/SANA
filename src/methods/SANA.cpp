@@ -828,7 +828,7 @@ void SANA::performChange(uint actColId) {
         oldMs3Denom = MultiS3::denom;
         oldMs3Numer = MultiS3::numer;
     }
-    int newAligEdges           = (needAligEdges or needSec) ? aligEdges + EdgeCorrectness::getIncChangeOp(peg, oldHole, newHole, A) : -1;
+    int newAligEdges           = (needAligEdges or needSec) ? aligEdges + ((EdgeCorrectness*) MC->getMeasure("ec"))->getIncChangeOp(peg, oldHole, newHole, A) : -1;
     double newEdSum            = needEd ? edSum + ((EdgeDifference*) MC->getMeasure("ed"))->getIncChangeOp(peg, oldHole, newHole, A) : -1;
     double newErSum            = needEr ? erSum + ((EdgeRatio*) MC->getMeasure("er"))->getIncChangeOp(peg, oldHole, newHole, A) : -1;
     double newEgmSum           = needEgm ? egmSum + ((EdgeGeoMean*) MC->getMeasure("egm"))->getIncChangeOp(peg, oldHole, newHole, A) : -1;
@@ -973,7 +973,7 @@ void SANA::performSwap(uint actColId) {
         oldMs3Denom = MultiS3::denom;
     }
 
-    int newAligEdges           = (needAligEdges or needSec) ? aligEdges + EdgeCorrectness::getIncSwapOp(peg1, peg2, hole1, hole2, A) : -1;
+    int newAligEdges           = (needAligEdges or needSec) ? aligEdges + ((EdgeCorrectness*) MC->getMeasure("ec"))->getIncSwapOp(peg1, peg2, hole1, hole2, A) : -1;
     double newSquaredAligEdges = needSquaredAligEdges ? squaredAligEdges + squaredAligEdgesIncSwapOp(peg1, peg2, hole1, hole2) : -1;
     double newExposedEdgesNumer= needExposedEdges ? EdgeExposure::numer + exposedEdgesIncSwapOp(peg1, peg2, hole1, hole2) : -1;
     double newMS3Numer         = needMS3 ? MultiS3::numer + MS3IncSwapOp(peg1, peg2, hole1, hole2) : -1;
