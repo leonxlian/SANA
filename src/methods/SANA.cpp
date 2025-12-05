@@ -1062,7 +1062,7 @@ double SANA::scoreComparison(double newAligEdges, double newInducedEdges, double
         newCurrentScore += egmWeight?egmWeight * newEdgeGeoMeanSum:0;
         newCurrentScore += eminWeight?eminWeight * newEdgeMinSum:0;
         newCurrentScore += s3Weight?s3Weight * (newAligEdges / (g1Edges + newInducedEdges - newAligEdges)):0;
-        newCurrentScore += icsWeight?icsWeight * (newAligEdges / newInducedEdges):0;
+        newCurrentScore += (icsWeight && newInducedEdges != 0)?icsWeight * (newAligEdges / newInducedEdges):0;
         newCurrentScore += secWeight?secWeight * (newAligEdges / g1Edges + newAligEdges / g2Edges)*0.5:0;
         newCurrentScore += localWeight?localWeight * (newLocalScoreSum / n1):0;
         newCurrentScore += wecWeight?wecWeight * (newWecSum / (2 * g1Edges)):0;
@@ -1093,7 +1093,7 @@ double SANA::scoreComparison(double newAligEdges, double newInducedEdges, double
         newCurrentScore = 1;
         newCurrentScore *= ecWeight?ecWeight * (newAligEdges / g1Edges):0;
         newCurrentScore *= s3Weight?s3Weight * (newAligEdges / (g1Edges + newInducedEdges - newAligEdges)):0;
-        newCurrentScore *= icsWeight?icsWeight * (newAligEdges / newInducedEdges):0;
+        newCurrentScore *= (icsWeight && newInducedEdges != 0)?icsWeight * (newAligEdges / newInducedEdges):0;
         newCurrentScore *= localWeight?localWeight * (newLocalScoreSum / n1):0;
         newCurrentScore *= secWeight?secWeight * (newAligEdges / g1Edges + newAligEdges / g2Edges)*0.5:0;
         newCurrentScore *= wecWeight?wecWeight * (newWecSum / (2 * g1Edges)):0;
@@ -1122,7 +1122,7 @@ double SANA::scoreComparison(double newAligEdges, double newInducedEdges, double
         newCurrentScore += ecWeight?ecWeight * (newAligEdges / g1Edges):0;
         newCurrentScore += secWeight?secWeight * (newAligEdges / g1Edges + newAligEdges / g2Edges)*0.5:0;
         newCurrentScore += s3Weight?s3Weight * (newAligEdges / (g1Edges + newInducedEdges - newAligEdges)):0;
-        newCurrentScore += icsWeight?icsWeight * (newAligEdges / newInducedEdges):0;
+        newCurrentScore += (icsWeight && newInducedEdges != 0)?icsWeight * (newAligEdges / newInducedEdges):0;
         newCurrentScore += localWeight?localWeight * (newLocalScoreSum / n1):0;
         newCurrentScore += wecWeight?wecWeight * (newWecSum / (2 * g1Edges)):0;
         newCurrentScore += jsWeight?jsWeight * (newJsSum):0;
@@ -1148,7 +1148,7 @@ double SANA::scoreComparison(double newAligEdges, double newInducedEdges, double
 
         newCurrentScore += ecWeight?ecWeight * (newAligEdges / g1Edges):0;
         newCurrentScore += s3Weight?s3Weight * (newAligEdges / (g1Edges + newInducedEdges - newAligEdges)):0;
-        newCurrentScore += icsWeight?icsWeight * (newAligEdges / newInducedEdges):0;
+        newCurrentScore += (icsWeight && newInducedEdges != 0)?icsWeight * (newAligEdges / newInducedEdges):0;
         newCurrentScore += secWeight?secWeight * (newAligEdges / g1Edges + newAligEdges / g2Edges)*0.5:0;
         newCurrentScore += localWeight?localWeight * (newLocalScoreSum / n1):0;
         newCurrentScore += wecWeight?wecWeight * (newWecSum / (2 * g1Edges)):0;
@@ -1171,7 +1171,7 @@ double SANA::scoreComparison(double newAligEdges, double newInducedEdges, double
         newCurrentScore += ecWeight?ecWeight / (newAligEdges / g1Edges):0;
         newCurrentScore += secWeight?secWeight * (newAligEdges / g1Edges + newAligEdges / g2Edges)*0.5:0;
         newCurrentScore += s3Weight?s3Weight / (newAligEdges / (g1Edges + newInducedEdges - newAligEdges)):0;
-        newCurrentScore += icsWeight?icsWeight / (newAligEdges / newInducedEdges):0;
+        newCurrentScore += (icsWeight && newInducedEdges != 0)?icsWeight / (newAligEdges / newInducedEdges):0;
         newCurrentScore += localWeight?localWeight / (newLocalScoreSum / n1):0;
         newCurrentScore += wecWeight?wecWeight / (newWecSum / (2 * g1Edges)):0;
         newCurrentScore += jsWeight?jsWeight * (newJsSum):0;
@@ -1206,7 +1206,7 @@ double SANA::scoreComparison(double newAligEdges, double newInducedEdges, double
         newCurrentScore += ecWeight?ecWeight * (newAligEdges / g1Edges):0;
         newCurrentScore += secWeight?secWeight * (newAligEdges / g1Edges + newAligEdges / g2Edges)*0.5:0;
         newCurrentScore += s3Weight?s3Weight * (newAligEdges / (g1Edges + newInducedEdges - newAligEdges)):0;
-        newCurrentScore += icsWeight?icsWeight * (newAligEdges / newInducedEdges):0;
+        newCurrentScore += (icsWeight && newInducedEdges != 0)?icsWeight * (newAligEdges / newInducedEdges):0;
         newCurrentScore += localWeight?localWeight * (newLocalScoreSum / n1):0;
         newCurrentScore += wecWeight?wecWeight * (newWecSum / (2 * g1Edges)):0;
         newCurrentScore += jsWeight?jsWeight * (newJsSum):0;
