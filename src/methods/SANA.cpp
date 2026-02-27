@@ -375,6 +375,7 @@ Alignment SANA::run() {
 	return runUsingIterations();
 }
 
+// Luca: pthreads here
 Alignment SANA::runUsingIterations() {
     long long int maxIters = useIterations ? maxIterations : (long long int) (getIterPerSecond()*maxSeconds);
     double leeway = 2;
@@ -382,6 +383,7 @@ Alignment SANA::runUsingIterations() {
 
     long long int iter;
     _reallyRunning=true;
+    // Luca: create threads here, each performing maxIters/numThreads (maybe?)
     for (iter = 1; iter <= maxIters && _numNonstationaryColors>0; iter++) {
         Temperature = temperatureFunction(float(iter)/maxIters, TInitial, TDecay);
         SANAIteration();
@@ -419,6 +421,7 @@ Alignment SANA::runUsingIterations() {
 #define MIN_CONFIDENCE 0.99999
 #define TOL_SAFETY_MARGIN 1.07 // empirically this seems to cut failure rates to below 5%.
 
+// Luca: this function will be what each thread runs independently
 Alignment SANA::runUsingConfidenceIntervals() {
     if(!multi_iteration_only) getIterPerSecond(); // avoid wasting several seconds of CPU time
     iterationsPerStep = 1; // this code doesn't use "steps"
@@ -444,6 +447,7 @@ Alignment SANA::runUsingConfidenceIntervals() {
 #endif
     _reallyRunning=true;
     long int lastBatchCount=0;
+    // Luca: parallel threads here
     for (tau = 0; tau <= 1; tau += tauStep) {
 	int batchesPerTemperature = 0;
         Temperature = temperatureFunction(tau, TInitial, TDecay);
@@ -780,6 +784,7 @@ void SANA::performChange(uint actColId) {
     numUnassigWithCol = actColToUnassignedG2Nodes[actColId].size();
     assert(numUnassigWithCol > 0);
     if(alignment.allowedPartnersEnabled()) {
+	// assert(threads == 1); // Luca don't worry about this case for now
 	assert(G1->numColors()==1 && G2->numColors()==1);
         do {
 	    unassignedVecIndex = randInt(0, numUnassigWithCol-1);
@@ -813,6 +818,7 @@ void SANA::performChange(uint actColId) {
 	numUnassigWithCol = actColToUnassignedG2Nodes[actColId].size();
 	unassignedVecIndex = randInt(0, numUnassigWithCol-1);
 	newHole = actColToUnassignedG2Nodes[actColId][unassignedVecIndex];
+	// Luca mutex: check oldHole and newHole, discard BOTH and try again if EITHER is locked
     }
 
     assert(oldHole != newHole);
@@ -872,6 +878,7 @@ void SANA::performChange(uint actColId) {
 #endif
 
     if (makeChange) {
+	// Luca mutex: I think ALL of these need to be protected, but it can probably be all one mutex
 	stationary[peg]=0;
 	assert(A_[newHole] == G1->getNumNodes()); // should be empty
 	A_[oldHole] = G1->getNumNodes(); // oldHole becomes empty, so n1 = invalid
@@ -915,6 +922,7 @@ void SANA::performChange(uint actColId) {
 void SANA::performSwap(uint actColId) {
     uint peg1, peg2, hole1, hole2;
     if(alignment.allowedPartnersEnabled()) {
+	// Luca: for now assert numThreads == 1 and don't worry about this case
 	assert(G1->numColors()==1 && G2->numColors()==1);
         do {
 	    hole2 = G2->getNumNodes() * randomReal(gen);
@@ -952,6 +960,7 @@ void SANA::performSwap(uint actColId) {
 	    peg2 = randomG1NodeWithActiveColor(actColId, false);
 	    if (peg1 != peg2) break;
 	}
+	// Luca mutex: discard both if....
 	hole1 = A[peg1]; hole2 = A[peg2];
     }
     assert(peg1 != peg2);
@@ -1016,6 +1025,7 @@ void SANA::performSwap(uint actColId) {
 #endif
 
     if (makeChange) {
+	// Luca mutex: protect these variables
 	stationary[peg1]=stationary[peg2]=0;
 	assert(A_[hole1]==peg1 && A_[hole2]==peg2);
 	alignment[peg1] = A[peg1] = hole2; A_[hole2] = peg1;
