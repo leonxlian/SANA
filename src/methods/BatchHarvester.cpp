@@ -52,7 +52,7 @@ SANAThree::BatchHarvester::BatchHarvester(const unsigned threadNumber, SANAThree
 
     mt19937_64 generator(random_device{}());
 
-    cerr << "BatchHarvester is using " << threadNumber << " threads\n";
+    cerr << "HI THERE! BatchHarvester is using " << threadNumber << " threads\n";
 
     if (threadNumber == 0) throw runtime_error("Thread number must be > 0");
     threadVector.reserve(threadNumber);
@@ -193,12 +193,15 @@ SANAThree::batchOutput SANAThree::BatchHarvester::collectBatch(double temperatur
 void SANAThree::BatchHarvester::daughterFunction(uint64_t seed) {
     mt19937_64 generator(seed);
 
+    cerr << "DAUGHTER FUNCTION HERE\n" ;;
+
     unique_lock<mutex> outputLock(outputMutex, defer_lock);
     unique_lock<mutex> stateLock(stateMutex);
 
     // After every operation is complete, the function returns to check the current state of the Harvester
-    while (true) switch (currentState) { // Always enter with state locked
-
+    int whileCount=0;
+    while (true) {
+	switch (currentState) { // Always enter with state locked
         case State::anneal: {
             stateLock.unlock();
             if (startedRequests++ >= parent.batchSize) {
@@ -228,7 +231,7 @@ void SANAThree::BatchHarvester::daughterFunction(uint64_t seed) {
 
             ++finishedRequests;
             stateLock.lock();
-            continue;
+	    break;
         }
 
         case State::equilibrate: {
@@ -267,23 +270,25 @@ void SANAThree::BatchHarvester::daughterFunction(uint64_t seed) {
             outputLock.unlock();
 
             stateLock.lock();
-            continue;
+            break;
         }
 
         case State::pause: {
                 if (++daughtersPaused == daughterNum) handlerCondition.notify_all();
                 pausedCondition.wait(stateLock, [this]{return daughtersPaused == 0;});
-            continue;
+            break;
         }
 
         case State::terminate: {
             if (++daughtersTerminated == daughterNum) handlerCondition.notify_all();
             return;
+	    break;
         }
-
         default: throw runtime_error("Unknown harvester state. Either I messed up or someone touched my code -Marcus");
+	    break;
     }
-
+    if(++whileCount%100000==0) printf("bH whileCount %d\n", whileCount);
+    }
 }
 
 
