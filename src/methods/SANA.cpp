@@ -107,7 +107,8 @@ SANA::SANA(const Graph* G1, const Graph* G2,
     ecWeight  = MC->getWeight("ec");
     edWeight  = MC->getWeight("ed");
     erWeight  = MC->getWeight("er");
-    eminWeight= MC->getWeight("emin");
+    try { eminWeight = MC->getWeight("emin"); }
+    catch(...) { eminWeight = 0; }
     egmWeight = MC->getWeight("egm");
     s3Weight  = MC->getWeight("s3");
     jsWeight  = MC->getWeight("js");

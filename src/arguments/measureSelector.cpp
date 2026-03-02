@@ -1,6 +1,7 @@
 #include "measureSelector.hpp"
 #include <cassert>
 #include <iostream>
+#include <type_traits>
 #include "../utils/FileIO.hpp"
 #include "../measures/EdgeCorrectness.hpp"
 #include "../measures/EdgeDifference.hpp"
@@ -170,7 +171,21 @@ void initMeasures(MeasureCombination& M, const Graph& G1, const Graph& G2, Argum
     m = new EdgeDifference(&G1, &G2); M.addMeasure(m, getWeight("ed", G1, G2, args));
     m = new JaccardSimilarityScore(&G1, &G2); M.addMeasure(m, getWeight("js", G1, G2, args));
     m = new EdgeRatio(&G1, &G2); M.addMeasure(m, getWeight("er", G1, G2, args));
-    m = new EdgeMin(&G1, &G2); M.addMeasure(m, getWeight("emin", G1, G2, args));
+    
+    // EdgeMin only works with unsigned integer edge weights
+    // Only instantiate it if EDGE_T is compatible (not float)
+#ifdef WEIGHT
+    if (std::is_integral<EDGE_T>::value && std::is_unsigned<EDGE_T>::value) {
+        m = new EdgeMin(&G1, &G2); 
+        M.addMeasure(m, getWeight("emin", G1, G2, args));
+    } else if (getWeight("emin", G1, G2, args) > 0 || detRep) {
+        throw runtime_error("EdgeMin requires unsigned integer edge weights (compile with EDGE_T=unsigned)");
+    }
+#else
+    m = new EdgeMin(&G1, &G2); 
+    M.addMeasure(m, getWeight("emin", G1, G2, args));
+#endif
+    
     m = new EdgeGeoMean(&G1, &G2); M.addMeasure(m, getWeight("egm", G1, G2, args));
     m = new InducedConservedStructure(&G1, &G2); M.addMeasure(m, getWeight("ics", G1, G2, args));
     m = new MultiEdgeCorrectness(&G1, &G2); M.addMeasure(m, getWeight("mec", G1, G2, args));
