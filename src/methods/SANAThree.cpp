@@ -611,13 +611,13 @@ SANAThree::changeRequest SANAThree::chooseNextRequest(mt19937_64 &generator) {
 // it all off into its own function has solved this only marginally. It works, but there has got to
 // be a less intrusive way to do this!
 double SANAThree::implementLastRequest(double pBad, const changeRequest &input, mt19937_64 &generator) {
+    double randomNum = randomReal(generator); // MARCUS says it's better to generate before the mutex...
     unique_lock<mutex> lockAlignmentAndHoles(alignmentMutex);
-
     holeLocks[input.hole1] = holeLocks[input.hole2] = false;
     if (input.twoPegs) totalSwapsCalculated++;
     else totalMovesCalculated++;
 
-    if (randomReal(generator) >= pBad) return currentScore;
+    if (randomNum >= pBad) return currentScore;
 
     if (input.twoPegs) {
         alignment.swap(input.peg1, input.peg2);
