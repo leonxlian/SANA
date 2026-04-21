@@ -5,9 +5,8 @@
 #include <sstream>
 #include <fcntl.h>
 #include <regex>
-#include <set>
 
-#ifdef LINUX
+#ifdef __linux__
 #include <execinfo.h>
 #endif
 
@@ -196,7 +195,8 @@ Graph Graph::nodeInducedSubgraph(const vector<unsigned>& nodes) const {
     newNodeNames.reserve(newN);
     vector<array<string, 2>> newNodeNameToColorName;
     bool hasDefColor = colorNames[0] == DEFAULT_COLOR_NAME; //if present, the default color is at index 0
-    for (const Node& node : this->nodes) {
+    for (unsigned i = 0; i < newN; ++i) {
+        const Node &node = this->nodes[nodes[i]];
         newNodeNames.push_back(node.nodeName);
         if (hasDefColor and node.colorID == 0) continue;
         newNodeNameToColorName.push_back({node.nodeName, node.colorName});
@@ -273,7 +273,8 @@ Graph Graph::graphIntersection(const Graph& other, const vector<unsigned>& thisT
                  newNodeNames, {}, newNodeColorPairs); //unweighted result
 }
 
-#ifdef LINUX
+#ifdef __linux__
+#ifdef GDB
 void print_stack_trace() {
     const unsigned max_frames = 64;
     void* callstack[max_frames];
@@ -281,10 +282,33 @@ void print_stack_trace() {
     char** symbols = backtrace_symbols(callstack, frames);
 
     for (unsigned i = 0; i < frames; ++i) {
-        std::cout << symbols[i] << std::endl;
+        string symbol(symbols[i]);
+        size_t start = symbol.find('(');
+        size_t end = symbol.find('+', start);
+
+        if (start != string::npos && end != string::npos && start < end) {
+            string mangled = symbol.substr(start + 1, end - start - 1);
+            int status = -1;
+
+            char* demangled = abi::__cxa_demangle(mangled.c_str(), nullptr, 0, &status);
+
+            if (status == 0 && demangled) {
+                // Success: Print the module, the clean name, and the rest of the offset
+                cerr << symbol.substr(0, start + 1) << demangled
+                     << symbol.substr(end) << endl;
+                free(demangled);
+            } else {
+                // Demangling failed, just print what we have
+                cerr << symbol << endl;
+            }
+        } else {
+            // Not a standard format, print raw
+            cerr << symbol << endl;
+        }
     }
     free(symbols); // Free the memory allocated by backtrace_symbols
 }
+#endif
 #endif
 
 unique_ptr<vector<unsigned>> Graph::getAdjList(unsigned node) const {
@@ -293,9 +317,11 @@ unique_ptr<vector<unsigned>> Graph::getAdjList(unsigned node) const {
         cerr << "Warning, soon to deprecated getAdjList function was used. This should be fixed." <<endl;
         cerr << "It can cause issues if the output is dereferenced as a temporary object." <<endl;
         cerr << "It is also a poorly optimized compatibility function left over from SANA2.0. -Marcus" <<endl;
-        cerr << "If you are on Linux, you should shortly receive a stacktrace for this call..." <<endl;
-#ifdef LINUX
+        cerr << "If you are on Linux and debugging, you should shortly receive a stacktrace for this call..." <<endl;
+#ifdef __linux__
+#ifdef GDB
         print_stack_trace();
+#endif
 #endif
         gaveWarning = true;
     }
@@ -310,8 +336,10 @@ unique_ptr<vector<vector<unsigned>>> Graph::getAdjLists() const {
     if (!gaveWarning) {
         cerr << "NO ONE SHOULD BE USING Graph::getAdjLists() EVER! FIX YO CODE -Marcus" <<endl;
         cerr << "If you are on Linux, you should shortly receive a stacktrace for this offensive call..." <<endl;
-#ifdef LINUX
+#ifdef __linux__
+#ifdef GDB
         print_stack_trace();
+#endif
 #endif
         gaveWarning = true;
     }
@@ -330,8 +358,10 @@ unique_ptr<vector<unsigned>> Graph::getInjList(unsigned node) const {
         cerr << "It can cause issues if the output is dereferenced as a temporary object." <<endl;
         cerr << "It is also a poorly optimized compatibility function left over from SANA2.0. -Marcus" <<endl;
         cerr << "If you are on Linux, you should shortly receive a stacktrace for this call..." <<endl;
-#ifdef LINUX
+#ifdef __linux__
+#ifdef GDB
         print_stack_trace();
+#endif
 #endif
         gaveWarning = true;
     }
@@ -340,18 +370,8 @@ unique_ptr<vector<unsigned>> Graph::getInjList(unsigned node) const {
         injList->push_back(pair.first);
     return injList;}
 
-const vector<array<unsigned, 2>>* Graph::getEdgeList() const {
-    static bool gaveWarning = false;
-    if (!gaveWarning) {
-        cerr << "Warning, soon to deprecated getEdgeList function was used. This should be fixed." <<endl;
-        cerr << "It is a poorly optimized compatibility function left over from SANA2.0. -Marcus" <<endl;
-        cerr << "If you are on Linux, you should shortly receive a stacktrace for this call..." <<endl;
-#ifdef LINUX
-        print_stack_trace();
-#endif
-        gaveWarning = true;
-    }
-    return &edgeList;
+const vector<array<unsigned, 2>> &Graph::getEdgeList() const {
+    return edgeList;
 }
 
 const unordered_map<string, unsigned>* Graph::getNodeNameToIndexMap() const {

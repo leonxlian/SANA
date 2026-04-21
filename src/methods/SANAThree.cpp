@@ -16,6 +16,9 @@
 #include <cstdio>
 
 #include "SANAThree.hpp"
+
+#include <cinttypes>
+
 #include "BatchHarvester.hpp"
 
 #include "../measures/SquaredEdgeScore.hpp"
@@ -25,41 +28,51 @@
 
 bool SANAThree::saveAligAndExitOnInterruption = false;
 bool SANAThree::saveAligAndContOnInterruption = false;
-SANAThree::SANAThree(const Graph* G1, const Graph* G2, double TInitial, double TDecay, double maxSeconds,
-        long long maxIterations, double tolerance, bool addHillClimbing, const MeasureCombination* MC,
-        const string& scoreAggrStr, const Alignment& optionalStartAlig, const string& outputFileName,
-        const string& localScoresFileName, unsigned threadNumber):
+SANAThree::SANAThree(const Graph* G1, const Graph* G2, const double TInitial, const double TDecay,
+    const double maxSeconds, const long long maxIterations, const double tolerance,
+    const bool addHillClimbing, const MeasureCombination* MC, const string& scoreAggrStr,
+    const Alignment& optionalStartAlig, const string& outputFileName,
+    const string& localScoresFileName, unsigned threadNumber):
+
     Method(G1, G2, "SANAThree_" + MC->toString()),
     n1(G1->getNumNodes()),
     n2(G2->getNumNodes()),
     m1(G1->getNumEdges()),
     m2(G2->getNumEdges()),
+    tolerance(tolerance),
+    maxSeconds(maxSeconds),
+    maxIterations(maxIterations),
+    batchSize((max<uint64_t>(CHUNK_SIZE * threadNumber * 2, G2->getNumEdges()) / CHUNK_SIZE) * CHUNK_SIZE),
+    threadNumber(threadNumber),
     hillClimbing(addHillClimbing),
     needEC(MC->getWeight("ec") > 0),
     needEM(MC->getWeight("emin") > 0),
     needER(MC->getWeight("er") > 0),
-    tolerance(tolerance),
-    maxSeconds(maxSeconds),
-    maxIterations(maxIterations),
-    batchSize(max(n1,n2)),
-    threadNumber(threadNumber),
     MC(MC),
     startingAlignment(optionalStartAlig),
     outputFileName(outputFileName),
     localScoresFileName(localScoresFileName),
     tInitial(TInitial),
     tDecay(TDecay),
-    holeLocks(n2, false) {
+    holeLocks(n2)
+    {
+    if (batchSize % CHUNK_SIZE != 0) {
+        throw runtime_error("batchSize needs to be a multiple of CHUNK_SIZE!");
+    }
     // This should never happen, and if it does, it is 100% user error.
     if (threadNumber >= n1 / 2) {
         throw runtime_error(
-            "You should not request more threads than you have G1 nodes.");
+            "You should not request more threads than half the network size of G1.");
     }
 
     if (tolerance > 0) {
         if (maxIterations > 0 or maxSeconds > 0)
             throw runtime_error(
                 "To use iterations or time, first set \"-tolerance 0\" on the command line (NOT RECOMMENDED!)");
+    }
+
+    for (size_t i = 0; i < n2; ++i) {
+        holeLocks[i].clear(std::memory_order_relaxed);
     }
 
     currentScore = 0.;
@@ -70,20 +83,13 @@ SANAThree::SANAThree(const Graph* G1, const Graph* G2, double TInitial, double T
                 "run the old version." << endl;
     }
 
-
-    randomReal = uniform_real_distribution<>(0, 1);
-
     // NODE COLOR SYSTEM initialization
+    // TODO: Preferred Holes
 
     assert(G1->numColors() <= G2->numColors());
 
-
-    swapsPerColor.reserve(G1->numColors() + 1);
-    movesPerColor.reserve(G1->numColors() + 1);
-    swapsPerColor.push_back(0);
-    movesPerColor.push_back(0);
-    numSwaps = 0;
-    numAdjacentAlignments  = 0;
+    uint64_t numSwaps = 0;
+    uint64_t numAdjacentAlignments  = 0;
     for (uint g1Id = 0; g1Id < G1->numColors(); g1Id++) {
         string colName = G1->getColorName(g1Id);
         if (not G2->hasColor(colName))
@@ -99,9 +105,7 @@ SANAThree::SANAThree(const Graph* G1, const Graph* G2, double TInitial, double T
         const uint64_t numNeighbors = numSwapNeighbors + numMoveNeighbors;
 
         numSwaps += numSwapNeighbors;
-        swapsPerColor.push_back(numSwaps);
         numAdjacentAlignments += numSwapNeighbors + numMoveNeighbors;
-        movesPerColor.push_back(numAdjacentAlignments - numSwaps);
         if (true) {
             cerr << "SANAThree:: color " << colName << " has " << numSwapNeighbors << " possible swaps and "
                     << numMoveNeighbors << " possible moves (" << numNeighbors << " total)" << endl;
@@ -116,15 +120,12 @@ SANAThree::SANAThree(const Graph* G1, const Graph* G2, double TInitial, double T
         throw runtime_error(
             "There is a unique valid alignment, so running SANA is pointless");
 
-    //things initialized in initDataStructures because they depend on the starting alignment
-    //they have the same size for every run, so we can allocate the size here
-    colorUnassignedNodes = vector<vector<uint>>(swapsPerColor.size());
+    if (startingAlignment.numOfPegs() == 0)
+        alignment = Alignment::randomColorRestrictedAlignment(*G1, *G2);
+    else
+        alignment = startingAlignment;
+    currentScore = MC->eval(alignment);
 
-    totalMovesCalculated = 0;
-    totalMovesAccepted = 0;
-    totalSwapsCalculated = 0;
-    totalSwapsAccepted = 0;
-    initDataStructures();
     threadPool = new BatchHarvester {threadNumber, *this, batchSize / 2};
 }
 
@@ -148,35 +149,9 @@ Alignment SANAThree::runUsingConfidenceIntervals() {
     return run();
 }
 
-void SANAThree::initDataStructures() {
-    auto assignedNodesG2 = vector<char> (n2);
-
-    if (startingAlignment.size() == 0) alignment = Alignment::randomColorRestrictedAlignment(*G1, *G2);
+void SANAThree::resetAlignment() {
+    if (startingAlignment.numOfPegs() == 0) alignment = Alignment::randomColorRestrictedAlignment(*G1, *G2);
     else alignment = startingAlignment;
-
-    //init holeToColorID. For each node, we do the following transformations:
-    //g2Node -> g2ColorId -> g1ColorId -> actColId
-    vector<uint> g2ToG1ColorIdMap = G2->myColorIdsToOtherGraphColorIds(*G1);
-    auto holeToColorID = vector<uint>(n2, n1);
-    for (uint g2Node = 0; g2Node < n2; g2Node++) {
-        uint g2ColorId = G2->getNodeColor(g2Node);
-        uint color = g2ToG1ColorIdMap[g2ColorId];
-        if (color == Graph::INVALID_COLOR_ID) continue; //no node in G1 has this color
-        holeToColorID[g2Node] = color;
-    }
-
-    for (uint i = 0; i < n2; i++) assignedNodesG2[i] = false;
-    for (uint i = 0; i < n1; i++) assignedNodesG2[alignment[i]] = true;
-    //initialize actColToUnassignedG2Nodes (the size was already set in the constructor)
-    for (auto & colorUnassignedNode : colorUnassignedNodes)
-        colorUnassignedNode.clear();
-    for (uint g2Node = 0; g2Node < n2; g2Node++) {
-        if (assignedNodesG2[g2Node]) continue;
-        uint actColId = holeToColorID[g2Node];
-        if (actColId != n1) {
-            colorUnassignedNodes[actColId].push_back(g2Node);
-        }
-    }
 
     currentScore = MC->eval(alignment);
 }
@@ -184,7 +159,7 @@ void SANAThree::initDataStructures() {
 
 // TODO:
 // This is terribly outdated. I'll buy a (soft) cider for anyone who takes it upon themselves to
-// make a better version, but this relatively low priority.
+// make a better version, but this relatively low priority. -Marcus
 void SANAThree::describeParameters(ostream &stream) const {
     stream << "Temperature goldilocks:" << endl;
     stream << "T_initial: " << tInitial << endl;
@@ -199,8 +174,6 @@ string SANAThree::fileNameSuffix(const Alignment& Al) const {
     return "_" + extractDecimals(MC->eval(Al),3);
 }
 
-unsigned SANAThree::pBadsInBuffer() const {return threadPool->pBadsInBuffer();}
-
 double SANAThree::getEquilibriumPBadAtTemp(double temperature, unsigned timeoutSeconds) const {
     return threadPool->runUntilEquilibrium(temperature, timeoutSeconds);
 }
@@ -208,26 +181,22 @@ double SANAThree::getEquilibriumPBadAtTemp(double temperature, unsigned timeoutS
 Alignment SANAThree::run() {
     setInterruptSignal();
 
+    uint64_t iter;
     if (tolerance > 0)
-        runConfidenceIntervals();
+        iter = runConfidenceIntervals();
     else
-        runIterations();
+        iter = runIterations();
 
-    if (hillClimbing) runHillClimbing();
+    if (hillClimbing) iter += runHillClimbing();
 
-    cout<<"Calculated "<< totalMovesCalculated <<" moves\n";
-    cout<<"Calculated "<< totalSwapsCalculated <<" swaps\n";
-    cout<<"Calculated "<< totalMovesCalculated + totalSwapsCalculated <<" total iterations\n";
-    cout<<"Accepted "<< totalMovesAccepted <<" moves\n";
-    cout<<"Accepted "<< totalSwapsAccepted <<" swaps\n";
-    cout<<"Accepted "<< totalMovesAccepted + totalSwapsAccepted <<" total iterations\n";
+    cout<<"Calculated "<<iter<<" total iterations."<<endl;
 
     return alignment;
 }
 
 #define LEEWAY 1.75
 #define temperatureFunction(f, i, d) ((i) * exp(-(d) * (f)))
-void SANAThree::runIterations() {
+uint64_t SANAThree::runIterations() {
     double maxSecondsWithLeeway;
     long long unsigned maxBatches;
     unsigned batchesPerStep;
@@ -251,30 +220,28 @@ void SANAThree::runIterations() {
         maxBatches = 1 + maxIterations / batchSize;
         maxSecondsWithLeeway = 0;
     }
-    totalMovesCalculated = 0;
-    totalMovesAccepted = 0;
-    totalSwapsCalculated = 0;
-    totalSwapsAccepted = 0;
-    initDataStructures();
-    threadPool->resetBuffers();
+    resetAlignment();
     T.start();
-    long long unsigned iter = 0;
+    long long unsigned batch = 0;
     double temperature = tInitial;
-    for (; iter < maxBatches; iter += 1) {
-        temperature = temperatureFunction(static_cast<double>(iter)/static_cast<double>(maxBatches),
-                                                 tInitial, tDecay);
-        const batchOutput output = threadPool->collectBatch(temperature);
+    for (; batch < maxBatches; batch += 1) {
+        if (userInterrupted) {handleInterruption();}
         if (saveAligAndExitOnInterruption) break;
         if (saveAligAndContOnInterruption) printReportOnInterruption();
-        if (iter % batchesPerStep == 0) {
+
+        temperature = temperatureFunction(static_cast<double>(batch)/static_cast<double>(maxBatches),
+                                                 tInitial, tDecay);
+        const batchOutput output = threadPool->collectBatch(temperature);
+        if (batch % batchesPerStep == 0) {
             currentScore = MC->eval(alignment);
-            trackProgress(iter * batchSize, static_cast<double>(iter)/static_cast<double>(maxBatches), T.elapsed(),
+            trackProgress(batch * batchSize, static_cast<double>(batch)/static_cast<double>(maxBatches), T.elapsed(),
                 temperature, output.averagePBad);
         }
         if (maxSecondsWithLeeway != 0. and T.elapsed() > maxSecondsWithLeeway) break;
     }
-    trackProgress(iter * batchSize, static_cast<double>(iter)/static_cast<double>(maxBatches), T.elapsed(),
+    trackProgress(batch * batchSize, static_cast<double>(batch)/static_cast<double>(maxBatches), T.elapsed(),
                 temperature, 0.);
+    return batch * batchSize;
 }
 
 // All of these are purely heuristic -Wayne (I think, at least -Marcus)
@@ -285,7 +252,7 @@ void SANAThree::runIterations() {
 #define HAPPY_BATCHES MIN(10000, (int)(m1+m2))
 #define MIN_CONFIDENCE 0.99999
 #define TOL_SAFETY_MARGIN 1.07 // empirically this seems to cut failure rates to below 5%.
-void SANAThree::runConfidenceIntervals() {
+uint64_t SANAThree::runConfidenceIntervals() {
     TimerTrue T;
 
     // TODO: make all of these changeable on the command line
@@ -297,38 +264,43 @@ void SANAThree::runConfidenceIntervals() {
     if(confidence < MIN_CONFIDENCE) confidence = MIN_CONFIDENCE; // doesn't add much CPU to increase confidence.
 
     bool verbose = true;
-    if(verbose) printf("SANAThree::runConfidenceIntervals Parameters: batchSize %llu confidence %g tolerance per step %g\n",
+    if(verbose) printf("SANAThree::runConfidenceIntervals Parameters: batchSize %" PRIu64 " confidence %g tolerance per step %g\n",
 	batchSize, confidence, tolPerStep);
 
     STAT *scoreBatchMeans = StatAlloc(0, 0.0, 0.0, false, false);
     STAT *pBadBatchMeans = StatAlloc(0, 0.0, 0.0, false, false);
 
-    // TODO: add batchesPerStep from runIterations for a re-eval of score
+    // TODO: add batchesPerStep from runIterations for a regular re-eval of score
     long int lastBatchCount=0;
-    double previousScore = currentScore;
+    double previousScore = currentScore.load();
     double temperature = 0;
-    totalMovesCalculated = 0;
-    totalMovesAccepted = 0;
-    totalSwapsCalculated = 0;
-    totalSwapsAccepted = 0;
-    initDataStructures();
-    threadPool->resetBuffers();
+    resetAlignment();
+
+    double lastPBad = 0.0;
+
     T.start();
+
+    // Technical start of the loop, we do not indent for aesthetic reasons
     for (tau = 0; tau <= 1; tau += tauStep) {
-	int batchesPerTemperature = 0;
+	int batchesThisTemperature = 0;
         temperature = temperatureFunction(tau, tInitial, tDecay);
 
 	// Now the "inner loop"
 	bool satisfied = false;
 	while(!satisfied) {
+	    if (userInterrupted) {handleInterruption();}
 	    if (saveAligAndExitOnInterruption) break;
 	    if (saveAligAndContOnInterruption) printReportOnInterruption();
 
 	    const batchOutput output = threadPool->collectBatch(temperature);
-
-            ++batch; ++batchesPerTemperature;
+        ++batch; ++batchesThisTemperature;
 	    StatAddSample(scoreBatchMeans, output.averageScore);
 	    StatAddSample(pBadBatchMeans, output.averagePBad);
+	    lastPBad = output.averagePBad;
+
+	    if (batchesThisTemperature % MIN_BATCHES) {
+	        currentScore = MC->eval(alignment);
+	    }
 
 	    if(StatNumSamples(scoreBatchMeans)>=MIN_BATCHES) {
 		double pBadInterval = tolPerStep;
@@ -343,7 +315,7 @@ void SANAThree::runConfidenceIntervals() {
 		// HOWEVER, we also slowly decrease the tolerance (by slowly increasing the Interval), because
 		// sometimes we can get "stuck" for a VERY long time at one temperature because the score
 		// is fluctuating too much. Let's not get stuck too long.
-		relativeMultiplier *= (1+log(batchesPerTemperature));
+		relativeMultiplier *= (1+log(batchesThisTemperature));
 
 		scoreInterval *= relativeMultiplier;
 		pBadInterval *= relativeMultiplier;
@@ -375,10 +347,12 @@ void SANAThree::runConfidenceIntervals() {
 		}
 	    }
 	}
-        currentScore = MC->eval(alignment);
-        trackProgress(batch * batchSize, tau, T.elapsed(), temperature, threadPool->recentPBadTrue(), batchesPerTemperature,
-                      StatMean(scoreBatchMeans), StatMean(pBadBatchMeans));
-	if(tauStep < MAX_TAU_STEP) {
+
+    currentScore = MC->eval(alignment);
+    trackProgress(batch * batchSize, tau, T.elapsed(), temperature, lastPBad, batchesThisTemperature,
+                  StatMean(scoreBatchMeans), StatMean(pBadBatchMeans));
+
+    if(tauStep < MAX_TAU_STEP) {
 	    if(StatNumSamples(scoreBatchMeans) < HAPPY_BATCHES) {
 		if(verbose) printf(" *****> doing OK at tau %g & %d batches; increasing tauStep from %g",
 		    tau, StatNumSamples(scoreBatchMeans), tauStep);
@@ -399,7 +373,8 @@ void SANAThree::runConfidenceIntervals() {
 	StatReset(scoreBatchMeans); StatReset(pBadBatchMeans);
     }
     cout<<"Performed "<<batch<<" total batches\n";
-    trackProgress(batch * batchSize, tau, T.elapsed(), temperature, threadPool->recentPBadQuick());
+    trackProgress(batch * batchSize, tau, T.elapsed(), temperature, lastPBad);
+    return batch * batchSize;
 }
 
 // I stole this duration from SANA proper. I will repeat the comment there that this is
@@ -407,235 +382,129 @@ void SANAThree::runConfidenceIntervals() {
 // class?? TODO: fix this
 // -Marcus
 #define HILLCLIMB_DURATION 10000000000u
-void SANAThree::runHillClimbing() {
+uint64_t SANAThree::runHillClimbing() {
     Timer T;
     T.start();
 
     const unsigned long runTime = 1 + HILLCLIMB_DURATION / batchSize;
-    unsigned long long iter = 0;
-    for (; iter < runTime; iter++) {
+    unsigned long long batch = 0;
+    for (; batch < runTime; batch++) {
         threadPool->collectBatch(0.);
         currentScore = MC->eval(alignment);
     }
     cout<<"Hill climbing took "<<T.elapsedString()<<"s"<<endl;
-}
-
-#if 0
-    Note: The deterministic if-cascade below may instead need to use randomness to choose among the possibilities.
-       One way to do this could be to do a "normal" (Marcus) move, perhaps with probability (1-tau) \in [0,1], so that
-       we initially do mostly "Marcus" moves, transitioning to "allowed Partner" moves as the anneal progresses.
-Basic idea:
-    pick any hole at random (possibly restricted to those that are either EMPTY or UNHAPPY)
-    if hole has no allowed partner pegs
-	pick ANY (unhappy?) peg and pull it here
-    else
-	if hole has any unhappy partner pegs
-	    pick one and pull it here
-	else
-	    pick an already happy partner peg and pull it here
-	fi
-    fi
-    // NOTE: "pull it here" means "move" it if the hole was empty, otherwise "swap" with the hole the other peg is in.
-#endif
-// Special case of allowedPartners requests (which is incompatible with node color system)
-SANAThree::changeRequest SANAThree::allowedPartnersRequest(mt19937_64 &generator) {
-    assert(G1->numColors()==1 && G2->numColors()==1);
-    const unsigned color = 0;
-
-    unique_lock<mutex> lockAlignmentAndHoles(alignmentMutex, defer_lock);
-    // Request parameters
-    bool twoPegs = false;
-    unsigned peg1, peg2 = -1; // Garbage allocation so that an exception will occur if not set and then used
-    unsigned hole1, hole2;
-    unsigned hole2unassignedID = -1;
-
-    while(true) {
-	// pick hole2 first since it's the only one that could potentially be empty
-	lockAlignmentAndHoles.lock();
-	// hole2 = G2->getNumNodes() * randomReal(generator); // pick any hole
-	do {
-	    hole2 = G2->getNumNodes() * randomReal(generator);
-	} while(alignment.isHappyHole(hole2)); // isHappyHole is false if the hole is empty
-	peg2 = alignment.whichPeg(hole2); // can be (-1)
-	assert(peg2 == (unsigned)(-1) || peg2 < G1->getNumNodes());
-
-	if(alignment.allowedPegs(hole2).size() == 0) // if no partners exist, pick a random UNHAPPY peg
-	    do peg1 = G1->getNumNodes() * randomReal(generator);
-	    while(alignment.isHappyPeg(peg1));
-	else {
-	    unordered_set<uint> myUnhappyPegs;
-	    for(const auto peg : alignment.allowedPegs(hole2))
-		if(peg!=peg2 && !alignment.isHappy(peg, hole2))
-		    myUnhappyPegs.insert(peg);
-	    if(myUnhappyPegs.size()) { // there exist unhappy pegs; choose one and pull it here
-		uint randIndex = myUnhappyPegs.size() * randomReal(generator);
-		auto it = myUnhappyPegs.begin(); std::advance(it, randIndex);
-		peg1 = *it;
-	    } else { // all of hole2's allowed pegs are already happy, but pick one and pull it here anyay
-		uint randIndex = alignment.allowedPegs(hole2).size() * randomReal(generator);
-		auto it = alignment.allowedPegs(hole2).begin(); std::advance(it, randIndex);
-		peg1 = *it;
-	    }
-	}
-	assert(peg1 < G1->getNumNodes());
-	hole1 = alignment[peg1];
-	if(peg2 == (uint)(-1)) {
-	    twoPegs = false;
-            const unsigned numUnassignedHoles = colorUnassignedNodes.at(color).size();
-	    hole2unassignedID = (hole1+hole2) % numUnassignedHoles;
-	    colorUnassignedNodes[color][hole2unassignedID] = hole2;
-	} else
-	    twoPegs = true;
-	if (holeLocks[hole1] || holeLocks[hole2]) {
-	    lockAlignmentAndHoles.unlock();
-	    continue;
-	}
-	holeLocks[hole1] = holeLocks[hole2] = true;
-	return {twoPegs, peg1, peg2, hole1, hole2, hole2unassignedID, color, 0.0};
-    }
+    return batch * batchSize;
 }
 
 SANAThree::changeRequest SANAThree::chooseNextRequest(mt19937_64 &generator) {
-    if(alignment.allowedPartnersEnabled()) return allowedPartnersRequest(generator);
-
-    unique_lock<mutex> lockAlignmentAndHoles(alignmentMutex, defer_lock);
-
-    // Request parameters
-    bool twoPegs;
-
-    unsigned peg1;
-    unsigned peg2 = -1; // Garbage allocation so that an exception will occur if not set and then used
-    unsigned hole1;
-    unsigned hole2;
-
-    unsigned peg1colorID;
-    unsigned peg2colorID = -1;
-    unsigned hole2unassignedID = -1;
-
-    unsigned color = 0;
-
+    // Loop while we look for a valid adjacent alignment.
     while (true) {
-        uint64_t alignmentNumber = randIndex_64(numAdjacentAlignments, generator);
+        bool twoPegs = true;
 
-        // Swap Logic
-        if (alignmentNumber < numSwaps) {
-            twoPegs = true;
+        unsigned peg1 = randIndex_64(n1, generator);
+        unsigned hole1 = alignment.pegToHole(peg1);
 
-            // Find the active color
-            {
-                auto colorIter = upper_bound(swapsPerColor.begin(), swapsPerColor.end(), alignmentNumber) - 1;
-                color = colorIter - swapsPerColor.begin();
-                alignmentNumber = alignmentNumber - *colorIter;
-            }
-
-            // We consider each swap possibility of this color to be ordered in the following way:
-            // (0, 1), (0, 2), ..., (0, n), (1, 2), ..., (n-1, n)
-            // Ignoring symmetrical options (it's the same swap, after all), this means that the first
-            // (n - 1) indices for these options have peg1 = 0, then the next (n - 2) for these options
-            // have peg1 = 1 and so on. What this next complicated bit does is transform an index into
-            // these possibilities into the actual possibility.
-
-            // Enclosed in brackets so that these temporary variables keep in scope.
-            {
-                const unsigned numColorPegs = G1->numNodesWithColor(color);
-                // Calculating peg1. There is a quadratic inequality I use that derives from the fact that
-                // cumulativeSwaps(peg1) <= alignmentNumber < cumulativeSwaps(peg1 + 1). Do the math
-                // if you are confused, it's a good exercise.
-                const auto n = static_cast<double>(numColorPegs);
-                const auto Ad = static_cast<double>(alignmentNumber); // Narrowing cast, yuck!
-                const double discriminant = (2. * n - 1) * (2. * n - 1) - 8. * Ad;
-                peg1colorID = 1U + static_cast<unsigned>(ceil((2. * n - 1. - sqrt(discriminant)) / 2.));
-
-                // These are the possibilities that have already been counted for all first pegs that
-                // are less than the current one
-                uint64_t cumulativeSwaps = peg1colorID * (2ULL * numColorPegs - peg1colorID - 1ULL) / 2;
-
-                // Because any conversion from a double to an unsigned is sus, we ensure that we
-                // do indeed fulfill the inequality of:
-                // cumSwaps(peg1) <= alignmentNumber < cumSwaps(peg1  + 1)
-                while (alignmentNumber < cumulativeSwaps) {
-                    cumulativeSwaps -= numColorPegs - peg1colorID;
-                    peg1colorID--;
-                }
-                while (alignmentNumber >= cumulativeSwaps + numColorPegs - peg1colorID - 1) {
-                    cumulativeSwaps += numColorPegs - peg1colorID - 1;
-                    peg1colorID++;
-                }
-
-                // peg2's ID is just the offset from alignmentNumber - cumSwaps(peg1) and then offset
-                // again by peg1 + 1;
-                peg2colorID = static_cast<unsigned>(alignmentNumber - cumulativeSwaps + peg1colorID + 1);
-            }
-
-            peg1 = (*G1->getNodesWithColor(color))[peg1colorID];
-            peg2 = (*G1->getNodesWithColor(color))[peg2colorID];
-            lockAlignmentAndHoles.lock();
-            hole1 = alignment[peg1];
-            hole2 = alignment[peg2];
+        // TODO: Preferred Hole System
+        unsigned color = G1->getNodeColor(peg1);
+        unsigned colorNum = G2->getNodesWithColor(color)->size();
+        unsigned hole2 = G2->getNodesWithColor(color)->at(randIndex_64(colorNum, generator));
+        if (hole1 == hole2) {
+            continue;
         }
-        // Move Logic
-        else {
+        unsigned peg2 = alignment.holeToPeg(hole2);
+
+        if (peg2 == n1) {
             twoPegs = false;
-
-            alignmentNumber -= numSwaps;
-
-            // Find the active color
-            {
-                auto colorIter = upper_bound(movesPerColor.begin(), movesPerColor.end(), alignmentNumber) - 1;
-                color = colorIter - movesPerColor.begin();
-                alignmentNumber = alignmentNumber - *colorIter;
-            }
-
-            // YES, IT IS REALLY THIS EASY FOR THE MOVE CASE COMPARED TO THE SWAP CASE
-            const unsigned numUnassignedHoles = colorUnassignedNodes.at(color).size();
-            peg1colorID = alignmentNumber / numUnassignedHoles;
-            hole2unassignedID = alignmentNumber % numUnassignedHoles;
-
-            peg1 = (*G1->getNodesWithColor(color))[peg1colorID];
-            lockAlignmentAndHoles.lock();
-            hole1 = alignment[peg1];
-            hole2 = colorUnassignedNodes[color][hole2unassignedID];
         }
-        // I.E., if invalid, reroll. Rejection sampling, google it
-        if (holeLocks[hole1] || holeLocks[hole2]) {
-            lockAlignmentAndHoles.unlock();
+
+        if (!tryToLockHoles(hole1, hole2)) {
             continue;
         }
 
-        holeLocks[hole1] = holeLocks[hole2] = true;
-        return {twoPegs, peg1, peg2, hole1, hole2, hole2unassignedID, color, 0.0};
+        if (alignment.pegToHole(peg1) != hole1 || alignment.holeToPeg(hole2) != peg2) {
+            releaseHoles(hole1, hole2);
+            continue;
+        }
+
+        return {twoPegs, peg1, peg2, hole1, hole2};
     }
 }
 
-// This probably deserves a rework. I am uncomfortable with the current implementation and pushing
-// it all off into its own function has solved this only marginally. It works, but there has got to
-// be a less intrusive way to do this!
-double SANAThree::implementLastRequest(double pBad, const changeRequest &input, mt19937_64 &generator) {
-    double randomNum = randomReal(generator); // MARCUS says it's better to generate before the mutex...
-    unique_lock<mutex> lockAlignmentAndHoles(alignmentMutex);
-    holeLocks[input.hole1] = holeLocks[input.hole2] = false;
-    if (input.twoPegs) totalSwapsCalculated++;
-    else totalMovesCalculated++;
 
-    if (randomNum >= pBad) return currentScore;
+bool SANAThree::tryToLockHoles(unsigned hole1, unsigned hole2) {
+    if (hole1 == hole2) {
+        return false;
+    }
 
-    if (input.twoPegs) {
-        alignment.swap(input.peg1, input.peg2);
-        totalSwapsAccepted++;
+    // Philosopher's problem solution using a canonical locking order
+    unsigned holeA, holeB;
+    if (hole1 < hole2) {
+        holeA = hole1;
+        holeB = hole2;
     }
     else {
-        alignment.set(input.peg1, input.hole2);
-        colorUnassignedNodes[input.color][input.hole2unassignedID] = input.hole1; // Move
-        totalMovesAccepted++;
+        holeA = hole2;
+        holeB = hole1;
     }
 
-    const double val = currentScore.load() + input.energyInc;
-    currentScore.store(val);
+    // test_and_set returns TRUE if the hole is already "locked"
+    if (holeLocks[holeA].test_and_set(memory_order_acquire)) {
+        return false;
+    }
+    if (holeLocks[holeB].test_and_set(memory_order_acquire)) {
+        holeLocks[holeA].clear(memory_order_release); // Clear first "lock"
+        return false;
+    }
+
+    // test_and_set "acquired" both "locks" successfully (this code is technically lockless)
+
+    return true;
+}
+
+void SANAThree::releaseHoles(unsigned hole1, unsigned hole2) {
+    if (hole1 == hole2) { // This should never happen.
+        holeLocks[hole1].clear(memory_order_release);
+        return;
+    }
+
+    // Philosopher's problem solution using a canonical locking order
+    unsigned holeA, holeB;
+    if (hole1 < hole2) {
+        holeA = hole1;
+        holeB = hole2;
+    }
+    else {
+        holeA = hole2;
+        holeB = hole1;
+    }
+
+    holeLocks[holeB].clear(memory_order_release);
+    holeLocks[holeA].clear(memory_order_release);
+}
+
+
+double SANAThree::implementLastRequest(const double pBad, const double energyInc, const changeRequest &input, mt19937_64 &generator, uniform_real_distribution<> &dist) {
+    if (dist(generator) >= pBad) {
+        releaseHoles(input.hole1, input.hole2);
+        return currentScore;
+    }
+
+    if (input.twoPegs) {
+        alignment.swapPegs(input.peg1, input.peg2, input.hole1, input.hole2);
+    }
+    else {
+        alignment.movePeg(input.peg1, input.hole1, input.hole2);
+    }
+    releaseHoles(input.hole1, input.hole2);
+
+    // Yes, this causes a data race if two thread try to adjust the score at once. Too bad!
+    // The energyInc is already stale and we've already got floating point error accumulation.
+    // So this is acceptable, as long as we don't drift too far.
+    const double val = currentScore.load(memory_order_relaxed) + energyInc;
+    currentScore.store(val, memory_order_relaxed);
     return val;
 }
 
-// TODO
-// This function should NOT be re-written in C++, because C++ sucks at formatted output
 void SANAThree::trackProgress(long long unsigned iter, double fractionTime, double elapsedTime,
     double temperature, double lastAvgPBad, unsigned batches, double batchScore, double batchPbad) const {
 
@@ -656,35 +525,44 @@ void SANAThree::trackProgress(long long unsigned iter, double fractionTime, doub
     fflush(stdout);
 }
 
+volatile sig_atomic_t SANAThree::userInterrupted = 0;
+
 void sigHandlerThree(const int s) {
-    string line;
-    if(s == SIGINT) {
-        int c = 3; // default to save and continue
-        // probably an interactive ^C
-        do {
-            cout<<"Select an option (0 - 3):"<<endl<<"  (0) Do nothing and continue"<<endl<<"  (1) Exit"<<endl
-            <<"  (2) Save Alignment and Exit"<<endl<<"  (3) Save Alignment and Continue"<<endl<<">> ";
-            cin >> c;
-            if (cin.eof()) { // hmm, assume ^D means "save and continue"
-                SANAThree::saveAligAndContOnInterruption = true;
-                cin.clear();
-                return;
-            }
-            if (cin.fail()) {
-                c = -1;
-                cin.clear();
-                cin.ignore(numeric_limits<streamsize>::max(), '\n');
-            }
-            if      (c == 0) cout<<"Continuing..."<<endl;
-            else if (c == 1) exit(0);
-            else if (c == 2) SANAThree::saveAligAndExitOnInterruption = true;
-            else if (c == 3) SANAThree::saveAligAndContOnInterruption = true;
-        } while (c < 0 || c > 3);
+    if (s == SIGINT || s == SIGTERM || s == SIGHUP) {
+        SANAThree::userInterrupted = 1;
     }
-    else if(s == SIGTERM) // probably sent via top(1), so save and exit
-        SANAThree::saveAligAndExitOnInterruption = true;
-    else // any other signal (eg USR1 or something unexpected), save and continue
-        SANAThree::saveAligAndContOnInterruption = true;
+}
+
+void SANAThree::handleInterruption() {
+    userInterrupted = 0; // Reset the flag
+
+    int c = 3;
+    do {
+        cout << "\n--- SANA Interrupted ---" << endl;
+        cout << "Select an option (0 - 3):" << endl
+             << "  (0) Do nothing and continue" << endl
+             << "  (1) Exit" << endl
+             << "  (2) Save Alignment and Exit" << endl
+             << "  (3) Save Alignment and Continue" << endl << ">> ";
+
+        cin >> c;
+        if (cin.eof()) {
+            saveAligAndContOnInterruption = true;
+            cin.clear();
+            return;
+        }
+        if (cin.fail()) {
+            c = -1;
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        }
+
+        if      (c == 0) cout << "Continuing..." << endl;
+        else if (c == 1) exit(0);
+        else if (c == 2) saveAligAndExitOnInterruption = true;
+        else if (c == 3) saveAligAndContOnInterruption = true;
+
+    } while (c < 0 || c > 3);
 }
 
 void SANAThree::setInterruptSignal() {

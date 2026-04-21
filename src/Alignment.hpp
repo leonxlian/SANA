@@ -12,18 +12,24 @@
 #include "utils/utils.hpp"
 #include <atomic>
 
+#define invalidPeg pegNum
+#define invalidHole holeNum
+
 using namespace std;
 
 /* Please make it a priority not to modify this class. This is a very general/abstract/core class
    that should not know anything about any of the measures/methods/modes that use it.
    Do not add anything specific to, or used only by, a particular measure/method/mode.
    Instead of adding a function here, add it to the would-be-caller class with an alignment as parameter. */
+// I do not know who said above, but I second this! -ML
 class Alignment {
 public:
+
+    // CONSTRUCTORS
     Alignment();
-    Alignment(const Alignment& alig);
+    Alignment(const Alignment& other);
     Alignment &operator=(Alignment);
-    Alignment(const vector<uint>& mapping);
+    Alignment(const vector<uint>& mapping, unsigned holeNum);
     Alignment(const Graph& G1, const Graph& G2, const vector<array<string, 2>>& edgeList);
 
     static Alignment loadEdgeList(const Graph& G1, const Graph& G2, const string& fileName);
@@ -31,20 +37,17 @@ public:
     //list of pairs of aligned node names, but first node in each pair may be of G2
     static Alignment loadEdgeListUnordered(const Graph& G1, const Graph& G2, const string& fileName);
     static Alignment loadPartialEdgeList(const Graph& G1, const Graph& G2, const string& fileName, bool byName);
-    static Alignment loadMapping(const string& fileName);
+    static Alignment loadMapping(const string& fileName, const Graph& G1, const Graph& G2); // TODO
     static Alignment randomColorRestrictedAlignment(const Graph& G1, const Graph& G2);
     
-    void loadAllowedPartners(const Graph& G1, const Graph& G2, const string& fileName);
-
     //returns a random alignment from a graph with n1 nodes to a graph with nodes n2 >= n1 nodes
-    static Alignment random(uint n1, uint n2);
+    static Alignment random(uint pegNum, uint holeNum);
     static Alignment empty();
     static Alignment identity(uint n);
 
     //returns an alignment of size n2 that is the inverse of this
     //value 'n1' is used as invalid mapping
-    Alignment reverse(uint n2) const;
-    uint whichPeg(const uint hole);
+    Alignment reverse() const;
 
     //returns the correct alignment between G1 and G2 by looking at
     //their node names. it assumes that they have the same node names
@@ -52,19 +55,22 @@ public:
     //shuffled node order
     static Alignment correctMapping(const Graph& G1, const Graph& G2);
 
-    vector<uint> asVector() const {
-        vector<uint> v;
-        for (const auto& e : A) {
-            v.push_back(e.load());
-        }
-        return v;
-    }
+    // OPERATORS
 
-    void set(uint node, uint value) {A[node].store(value);}
-    const uint getSafe(uint node) const {return A[node].load();}
-    void swap(uint node1, uint node2){A[node2].store(A[node1].exchange(A[node2].load()));}
-    const uint operator[](uint node) const {return A[node].load(memory_order_relaxed);} // This is for relaxed and casual access. No write access, nerds.
-    uint size() const {return A.size();}
+    vector<uint> copyPegsToHoles() const;
+    vector<uint> copyHolesToPegs() const;
+
+    void movePeg(uint peg, uint newHole);
+    void movePeg(uint peg, uint oldHole, uint newHole);
+    void swapPegs(uint peg1, uint peg2);
+    void swapPegs(uint peg1, uint peg2, uint hole1, uint hole2);
+
+    uint pegToHole(uint peg) const {return pegsToHoles[peg].load(std::memory_order_relaxed);}
+    uint holeToPeg(uint hole) const {return holesToPegs[hole].load(std::memory_order_relaxed);}
+    uint operator[](uint peg) const {return pegsToHoles[peg].load(memory_order_relaxed);} // No write access.
+    uint numOfPegs() const {return pegNum;}
+    uint numOfHoles() const {return holeNum;}
+
     void compose(const Alignment& other);
 
     uint computeNumAlignedEdges(const Graph& G1, const Graph& G2) const;
@@ -72,22 +78,11 @@ public:
     bool isCorrectlyDefined(const Graph& G1, const Graph& G2) const;
     void printDefinitionErrors(const Graph& G1, const Graph& G2) const;
 
-    unordered_set<uint>& allowedPegs(const uint hole) { return allowedHole2Peg[hole]; }
-    unordered_set<uint>& allowedHoles(const uint peg) { return allowedPeg2Hole[peg]; }
-    bool allowedPartnersEnabled(void) { return allowedPeg2Hole.size() || allowedHole2Peg.size(); }
-    bool isHappy(const uint peg, const uint hole) {
-	if(peg==(uint)(-1) || hole ==(uint)(-1)) return false;
-	assert(allowedPeg2Hole[peg].count(hole)==allowedHole2Peg[hole].count(peg));
-	return allowedPeg2Hole[peg].count(hole);
-    }
-    bool isHappyPeg (const uint peg ) { return isHappy(peg, A[peg]); }
-    bool isHappyHole(const uint hole) { return isHappy(whichPeg(hole), hole); }
 private:
-    vector<atomic_uint> A;
-    // allowedPeg2Hole should basically be a set of entries of the form <G1node, set of G2 nodes>
-    // allowedHole2Peg is the inverse. Any node not listed is allowed to align anywhere
-    // NOTE: these are both GLOBAL to the Alignment class
-    static unordered_map<uint, unordered_set<uint>> allowedPeg2Hole, allowedHole2Peg;
+    unsigned pegNum; // Size of A, used as unassigned value for invA
+    unsigned holeNum; // Size of invA, used as unassigned value for A
+    vector<atomic_uint> pegsToHoles;
+    vector<atomic_uint> holesToPegs;
 };
 
 #endif /* ALIGNMENT_HPP */
