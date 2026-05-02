@@ -1,6 +1,6 @@
 #ifndef EDGEMIN_HPP
 #define EDGEMIN_HPP
-#include "WeightedMeasure.hpp"
+#include "../WeightedMeasure.hpp"
 
 class EdgeMin: public WeightedMeasure {
 public:

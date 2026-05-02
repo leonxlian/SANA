@@ -1,6 +1,6 @@
 #ifndef EDGEGEOMEAN_HPP
 #define EDGEGEOMEAN_HPP
-#include "WeightedMeasure.hpp"
+#include "../WeightedMeasure.hpp"
 
 class EdgeGeoMean: public WeightedMeasure {
 public:

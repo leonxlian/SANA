@@ -121,30 +121,30 @@ ARGUMENTS_SRC = 							\
 	src/arguments/SupportedArguments.cpp				
 
 MEASURES_SRCS = 							\
-	src/measures/EdgeCorrectness.cpp 				\
-	src/measures/EdgeDifference.cpp         			\
-	src/measures/EdgeRatio.cpp         				\
-	src/measures/EdgeMin.cpp         				\
-	src/measures/EdgeGeoMean.cpp         				\
+	src/measures/BooleanMeasures/EdgeCorrectness.cpp 		\
+	src/measures/WeightedMeasures/EdgeDifference.cpp         	\
+	src/measures/WeightedMeasures/EdgeRatio.cpp         		\
+	src/measures/WeightedMeasures/EdgeMin.cpp         		\
+	src/measures/WeightedMeasures/EdgeGeoMean.cpp         		\
 	src/measures/WeightedMeasure.cpp         			\
 	src/measures/BooleanMeasure.cpp         			\
-	src/measures/MultiEdgeCorrectness.cpp 				\
+	src/measures/MultiMeasures/MultiEdgeCorrectness.cpp 		\
 	src/measures/ExternalWeightedEdgeConservation.cpp               \
 	src/measures/NetGO.cpp      					\
-	src/measures/InducedConservedStructure.cpp			\
+	src/measures/BooleanMeasures/InducedConservedStructure.cpp	\
 	src/measures/InvalidMeasure.cpp             			\
 	src/measures/LargestCommonConnectedSubgraph.cpp			\
 	src/measures/Measure.cpp					\
 	src/measures/MeasureCombination.cpp				\
 	src/measures/NodeCorrectness.cpp 				\
-	src/measures/SymmetricSubstructureScore.cpp 			\
-	src/measures/SymmetricEdgeCoverage.cpp 				\
-	src/measures/SquaredEdgeScore.cpp 				\
-	src/measures/EdgeExposure.cpp 				\
+	src/measures/BooleanMeasures/SymmetricSubstructureScore.cpp 	\
+	src/measures/MultiMeasures/SymmetricEdgeCoverage.cpp 		\
+	src/measures/MultiMeasures/SquaredEdgeScore.cpp 		\
+	src/measures/MultiMeasures/EdgeExposure.cpp 			\
 	src/measures/WeightedEdgeConservation.cpp 			\
-	src/measures/JaccardSimilarityScore.cpp         			\
-	src/measures/MultiS3.cpp							\
-	src/measures/CoreScore.cpp						\
+	src/measures/JaccardSimilarityScore.cpp         		\
+	src/measures/MultiMeasures/MultiS3.cpp				\
+	src/measures/CoreScore.cpp					\
 	src/measures/localMeasures/EdgeCount.cpp 			\
 	src/measures/localMeasures/EdgeDensity.cpp 			\
 	src/measures/localMeasures/ExternalSimMatrix.cpp 		\

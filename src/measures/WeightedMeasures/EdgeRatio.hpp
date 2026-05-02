@@ -1,6 +1,6 @@
 #ifndef EDGERATIO_HPP
 #define EDGERATIO_HPP
-#include "WeightedMeasure.hpp"
+#include "../WeightedMeasure.hpp"
 
 #define DEBUG_EDGERATIO 0
 

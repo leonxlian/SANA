@@ -1,6 +1,6 @@
 #ifndef INDUCEDCONSERVEDSTRUCTURE_HPP
 #define INDUCEDCONSERVEDSTRUCTURE_HPP
-#include "BooleanMeasure.hpp"
+#include "../BooleanMeasure.hpp"
 
 class InducedConservedStructure: public BooleanMeasure {
 public:

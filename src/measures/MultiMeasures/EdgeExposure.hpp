@@ -3,9 +3,9 @@
 #include <vector>
 #include <iostream>
 #include "utils.hpp"
-#include "Measure.hpp"
-#include "localMeasures/LocalMeasure.hpp"
-#include "../Graph.hpp"
+#include "../Measure.hpp"
+#include "../localMeasures/LocalMeasure.hpp"
+#include "../../Graph.hpp"
 
 class EdgeExposure : public Measure {
 public:

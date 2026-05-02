@@ -1,6 +1,6 @@
 #ifndef SYMMETRICSUBSTRUCTURESCORE_HPP
 #define SYMMETRICSUBSTRUCTURESCORE_HPP
-#include "BooleanMeasure.hpp"
+#include "../BooleanMeasure.hpp"
 
 class SymmetricSubstructureScore: public BooleanMeasure {
 public:

@@ -3,9 +3,9 @@
 #include "utils/randomSeed.hpp"
 #include "utils/FileIO.hpp"
 #include "arguments/GraphLoader.hpp"
-#include "measures/EdgeCorrectness.hpp"
-#include "measures/InducedConservedStructure.hpp"
-#include "measures/SymmetricSubstructureScore.hpp"
+#include "measures/BooleanMeasures/EdgeCorrectness.hpp"
+#include "measures/BooleanMeasures/InducedConservedStructure.hpp"
+#include "measures/BooleanMeasures/SymmetricSubstructureScore.hpp"
 #include "measures/JaccardSimilarityScore.hpp"
 #include "measures/NodeCorrectness.hpp"
 

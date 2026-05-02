@@ -1,6 +1,6 @@
 #ifndef EDGECORRECTNESS_HPP
 #define EDGECORRECTNESS_HPP
-#include "BooleanMeasure.hpp"
+#include "../BooleanMeasure.hpp"
 
 class EdgeCorrectness: public BooleanMeasure {
 public:

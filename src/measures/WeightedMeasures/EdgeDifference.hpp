@@ -1,6 +1,6 @@
 #ifndef EDGEDIFFERENCE_HPP
 #define EDGEDIFFERENCE_HPP
-#include "WeightedMeasure.hpp"
+#include "../WeightedMeasure.hpp"
 
 class EdgeDifference: public WeightedMeasure {
 public:
