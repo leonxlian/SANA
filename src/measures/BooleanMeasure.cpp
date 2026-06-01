@@ -6,16 +6,16 @@ BooleanMeasure::BooleanMeasure(const Graph* G1, const Graph* G2, const string& n
 BooleanMeasure::~BooleanMeasure() {
 }
 
-double BooleanMeasure::getIncChangeOp(uint peg, uint oldHole, uint newHole, const Alignment& A) {
+int BooleanMeasure::getIncChangeOp(uint peg, uint oldHole, uint newHole, const Alignment& A) {
     return computeIncChangeOp(peg, oldHole, newHole, A);
 }
 
-double BooleanMeasure::getIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2, const Alignment& A) {
+int BooleanMeasure::getIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2, const Alignment& A) {
     return computeIncSwapOp(peg1, peg2, hole1, hole2, A);
 }
 
-double BooleanMeasure::computeIncChangeOp(uint peg, uint oldHole, uint newHole, const Alignment& A) {
-    double res = 0;
+int BooleanMeasure::computeIncChangeOp(uint peg, uint oldHole, uint newHole, const Alignment& A) {
+    int res = 0;
     if (G1->hasSelfLoop(peg)) {
         if (G2->hasSelfLoop(oldHole)) res -= G2->getEdgeWeight(oldHole, oldHole);
         if (G2->hasSelfLoop(newHole)) res += G2->getEdgeWeight(newHole, newHole);
@@ -31,12 +31,12 @@ double BooleanMeasure::computeIncChangeOp(uint peg, uint oldHole, uint newHole, 
     return res;
 }
 
-double BooleanMeasure::computeIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2, const Alignment& A) {
+int BooleanMeasure::computeIncSwapOp(uint peg1, uint peg2, uint hole1, uint hole2, const Alignment& A) {
 #ifdef WEIGHT
     throw runtime_error("BooleanMeasure::computeIncSwapOp should not be called with WEIGHT");
     return 0;
 #else
-    double res = 0;
+    int res = 0;
     if (G1->hasSelfLoop(peg1)) {
         if (G2->hasSelfLoop(hole1)) res -= G2->getEdgeWeight(hole1, hole1);
         if (G2->hasSelfLoop(hole2)) res += G2->getEdgeWeight(hole2, hole2);
